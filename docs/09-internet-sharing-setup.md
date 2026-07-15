@@ -1,4 +1,4 @@
-# 09 — Internet Sharing: Laptop → Jetson (macOS done, Windows TBD)
+# 09 — Internet Sharing: Laptop → Jetson (macOS + Windows done)
 
 > **What this solves.** The Jetson has **no Wi-Fi** and the lab Wi-Fi uses
 > **client isolation** (devices can't talk to each other). So the only link
@@ -8,7 +8,7 @@
 > the critical path — not a nice-to-have.
 >
 > **Status**: macOS **done and verified on hardware** (2026-07-15).
-> Windows **not written yet** — see [Windows (TBD)](#windows-tbd).
+> Windows **done and verified on hardware** (2026-07-15) — see [Windows](#windows).
 
 ---
 
@@ -21,6 +21,21 @@
 5. `ssh jetson@jetson-2gnano.local`
 
 That's it. Nothing to configure on the Jetson, and no IP addresses to type.
+
+## TL;DR — the student flow (Windows)
+
+1. Connect to lab Wi-Fi.
+2. Plug the USB-ethernet dongle (**or** use the laptop's built-in LAN port), LAN cable to the Jetson, power on the Jetson.
+3. Open **PowerShell as Administrator** and run:
+   `powershell -ExecutionPolicy Bypass -File scripts\setup-internet-sharing-windows.ps1`
+   It enables ICS on the right adapter, adds the relay firewall rule, and checks every layer.
+4. `ssh jetson@jetson-2gnano.mshome.net`
+
+Shorter than macOS, because the Windows script *configures* sharing rather than
+guiding you to a toggle — see [Why the Windows script writes](#why-the-windows-script-writes-and-the-macos-one-doesnt).
+
+> **Windows uses `.mshome.net`, not `.local`.** Different name, same idea. See
+> [Names](#names-mshomenet-not-local).
 
 ---
 
@@ -91,7 +106,18 @@ ping google.com -> OK            (DNS)
 
 ---
 
-## The script
+## The scripts
+
+| Platform | Script | Behaviour |
+|---|---|---|
+| macOS | `scripts/setup-internet-sharing-macos.sh` | **Read-only** — checks and guides |
+| Windows | `scripts/setup-internet-sharing-windows.ps1` | **Configures ICS**, then checks (admin) |
+
+Both check the same layers in dependency order and stop at the first failure.
+They differ in whether they *write*, for a reason —
+see [Why the Windows script writes](#why-the-windows-script-writes-and-the-macos-one-doesnt).
+
+### macOS
 
 `scripts/setup-internet-sharing-macos.sh` — **read-only**. It changes no network
 settings; it checks each layer in dependency order and stops at the first failure
@@ -166,6 +192,9 @@ The Jetson advertises **every** address it has. If it holds an extra address the
 student's laptop can't reach, SSH tries that first and stalls before falling back.
 Use the IP from the script's output. See [Before cloning](#before-cloning-the-student-image).
 
+On **Windows**, `.local` didn't resolve at all rather than hanging — use
+`jetson-2gnano.mshome.net`. See [Names](#names-mshomenet-not-local).
+
 ### "It worked, now it doesn't"
 
 macOS Internet Sharing **often turns itself off after sleep or reboot.** Re-run
@@ -205,6 +234,40 @@ netmask 255.255.255.0
 
 ### Before cloning the student image
 
+**Wipe the DHCP lease database.** Found on hardware (2026-07-15) and it would
+have hit **every student**:
+
+```bash
+sudo rm -f /var/lib/dhcp/dhclient*.leases
+```
+
+`dhclient` keeps every lease it has ever taken. When it can't reach a DHCP server
+before `timeout` (15s), it **falls back to a stored lease and applies its
+`option routers`** — so a Jetson that had ever been on the dev Mac installs
+`default via 192.168.2.1` on a *Windows* student's laptop. Nothing is at that
+address, and all internet traffic dies there.
+
+The symptom is the nastiest kind, because everything you'd naturally check looks
+fine:
+
+```
+ssh                      -> works
+ping 192.168.137.1       -> works        (gateway is directly connected)
+ping google.com          -> RESOLVES     (ICS DNS proxy is directly connected)
+ping 8.8.8.8             -> 100% loss    <- only this reveals it
+ip route                 -> default via 192.168.2.1   <- the tell
+```
+
+DNS working while routing is dead is the fingerprint: both the gateway and the
+DNS proxy are on-link, so neither needs the default route. **Check `ip route`
+before anything else.**
+
+This is a boot-order landmine, not just a stale-image problem: it triggers
+whenever a Jetson boots *before* sharing is switched on — which is the normal
+student sequence. Wiping the lease DB removes the fallback, so `dhclient` simply
+waits and then takes the correct lease once ICS appears. Verified: after wiping
+and rebooting, the Jetson came up with the right gateway unaided.
+
 **Remove the `eth0:1` stanza.** Avahi advertises *both* `192.168.1.100` and the
 DHCP address. On the dev Mac that's harmless (it holds a `192.168.1.2` alias), but
 a **Windows student is on `192.168.137.x` and cannot reach `192.168.1.100`** — so
@@ -217,35 +280,159 @@ serial console. Keep `eth0:1` on the **dev unit only**.
 
 ---
 
-## Windows (TBD)
+## Windows
 
-Not written. To be done on the spare Windows desktop, mirroring this doc.
-What we already know:
+Verified end-to-end on hardware (2026-07-15): Windows 11 Pro 22631, ASIX USB
+dongle, Jetson 4GB. The DHCP-client design held — **the Jetson needed no change
+for Windows**, which is the whole payoff of not pinning a static IP.
 
-- **ICS forces `192.168.137.1/24`** and is not configurable through any supported
-  UI. The DHCP-client design means the Jetson needs **no change** for Windows.
-- **Windows Firewall blocks inbound connections on the ICS adapter by default.**
-  The relay listens on **port 8000**, so the Jetson's uploads will be **silently
-  dropped**. Every Windows student needs this once, as admin:
-  ```
-  netsh advfirewall firewall add rule name="Workshop Relay 8000" dir=in action=allow protocol=TCP localport=8000
-  ```
-  This has no macOS equivalent and is the most likely thing to eat class time.
-- **ICS needs local admin** and the *Internet Connection Sharing* service enabled.
-- **ICS frequently doesn't survive reboot/sleep** and needs re-toggling.
-- Unlike macOS, ICS puts its IP **directly on the adapter** (no bridge), so
-  `ipconfig` shows what you'd expect.
+Confirmed as predicted: ICS forces `192.168.137.1/24` (registry `ScopeAddress`,
+not configurable); it puts that IP **directly on the adapter**, no bridge, so
+`ipconfig` shows what you'd expect; and it needs local admin.
+
+Four things we got wrong or didn't know, each of which would have cost class time.
+
+### `192.168.137.1` is not `192.168.1.37`
+
+Easy to misread, and it inverts the whole mental model. The third octet is
+**137**. `192.168.137.0/24` and `192.168.1.0/24` are unrelated subnets, so ICS is
+exactly as off-scope from the Jetson's `192.168.1.100` fallback as macOS's
+`192.168.2.1` was. There is no "Windows is closer so it needs less setup"
+shortcut — that intuition is a misreading.
+
+### Adapter names are per-laptop and must never be hardcoded
+
+**This is the one that would have broken a handout.** The ICS dropdown lists
+adapters by **name** (`Ethernet 3`), and that name is a local artifact: Windows
+numbers `Ethernet`, `Ethernet 2`, `Ethernet 3`… incrementally per machine,
+counting every NIC instance it has ever enumerated. The same dongle appears as:
+
+| Student's laptop | Likely name |
+|---|---|
+| No built-in NIC (most ultrabooks) | `Ethernet` |
+| Has a built-in NIC (our dev laptop) | `Ethernet 2` / `Ethernet 3` |
+| Has docked or used other adapters | `Ethernet 4`, `5`, … |
+
+It isn't even stable on one laptop: the number binds to the **USB port**, so
+moving the dongle can produce a new name. "Choose Ethernet 3" would be wrong for
+most of the class.
+
+**Identify the adapter by what it is, not what it's called** — the only wired
+(`802.3`) adapter with link. A cabled, powered Jetson is what makes it `Up`:
+
+```powershell
+Get-NetAdapter -Physical | Where-Object { $_.Status -eq 'Up' -and $_.PhysicalMediaType -eq '802.3' }
+```
+
+This is brand-agnostic and covers **both** a USB dongle and a built-in LAN port,
+so it needs no assumption about what students bring. `-Physical` already excludes
+Hyper-V, WSL, VPN and Wi-Fi Direct adapters; the media type excludes Wi-Fi
+(`Native 802.11`) and Bluetooth. The script refuses to act if this matches
+anything other than exactly one adapter — a docked student with a second live
+ethernet is ambiguous, and guessing there recreates the very bug this prevents.
+
+### Names: `.mshome.net`, not `.local`
+
+`jetson-2gnano.local` **did not resolve** on the test laptop — `ssh`, `ping`, and
+`Resolve-DnsName` all failed outright. Don't put `.local` in the Windows handout.
+
+Use **`jetson-2gnano.mshome.net`** instead. ICS runs a DNS proxy that
+auto-registers each DHCP client's hostname under `mshome.net`, and the Jetson
+already sends its hostname (`send host-name = gethostname();` in
+`dhclient.conf`). So this works with **zero setup on either side** and is the
+direct Windows equivalent of `.local`. Verified: resolves, pings, and SSHs.
+
+> **Caveat, honestly.** The dev laptop runs **Tailscale**, which installs an NRPT
+> policy hijacking `.` (all DNS) to `100.100.100.100`. That is a plausible cause
+> of the `.local` failure, so a clean student laptop *might* resolve `.local`
+> fine. We didn't isolate it, because `mshome.net` works regardless and sidesteps
+> the question entirely. If you ever need `.local` on Windows, suspect a VPN
+> client first.
+
+**Using a name is mandatory, not a convenience.** ICS hands out a *different*
+address on each renew — we observed `.31` → `.225` → `.73` across three renews on
+one Jetson. No fixed IP can go in a handout.
+
+### The relay firewall rule is real — verified blocked, then open
+
+The doc's prediction was exactly right. With a listener up on `0.0.0.0:8000` and
+no rule, the Jetson's connection **times out silently** — nothing in any log, no
+error on either end. The ICS adapter lands in the **Public** firewall profile,
+whose default inbound action is Block.
+
+The documented command works verbatim (returns `Ok.`, creates an `Any`-profile
+inbound allow):
+
+```
+netsh advfirewall firewall add rule name="Workshop Relay 8000" dir=in action=allow protocol=TCP localport=8000
+```
+
+After it: the Jetson connects and the relay replies. The script does this for
+you. Full path verified — the Jetson discovers the relay as its default gateway
+(`ip route | awk '/^default/{print $3}'` → `192.168.137.1`), connects, and the
+listener logs the inbound connection.
+
+### Why the Windows script writes, and the macOS one doesn't
+
+`scripts/setup-internet-sharing-windows.ps1` **configures ICS**, unlike its
+read-only macOS counterpart. That inconsistency is deliberate.
+
+The macOS script is read-only because macOS has **no supported CLI** for Internet
+Sharing — the unofficial route breaks between releases. Windows has a
+**documented COM API** (`HNetCfg.HNetShare`), so automating it is supported
+rather than a hack.
+
+More importantly, the step being automated — **picking the right adapter** — is
+the one students get wrong, because the dropdown shows exactly the unstable name
+described above. Here, scripting removes a failure mode rather than adding one.
+
+Requires an **Administrator PowerShell** (both ICS and firewall rules do). Pass
+`-CheckOnly` to diagnose without changing anything — though note the ICS COM API
+returns nothing unelevated, so `-CheckOnly` still needs admin to see past step 2.
+
+Verified against a deliberately broken machine (ICS enabled but pointed at a
+disconnected built-in `Ethernet` — the exact bug we hit): the script cleared the
+stale sharing, repointed to the live adapter, created the firewall rule, and the
+Jetson had internet again, all in one run.
+
+### GUI equivalent
+
+If you'd rather click, or the script fails:
+
+1. `Win+R` → **`ncpa.cpl`**
+2. Right-click **Wi-Fi** → **Properties** → **Sharing** tab
+3. Tick *"Allow other network users to connect…"*
+4. **Home networking connection** → pick your Jetson's adapter. It's the one
+   whose grey subtitle names your dongle, or that appears/disappears when you
+   unplug it. **Do not** trust the `Ethernet N` number.
+5. **OK**
+
+The Sharing tab lives on the adapter you share *from* (Wi-Fi); the dropdown picks
+the destination. That's macOS's "share from / to" split across one panel.
+
+To repoint an existing share, untick → **OK** → reopen → re-tick → choose the
+right adapter. Note the dropdown shows only names, never descriptions — which is
+the trap.
+
+### Reaching a Jetson with no sharing (dev unit only)
+
+The Jetson's `eth0:1` fallback (`192.168.1.100`) is off-scope for ICS, so Windows
+needs an address on that subnet to reach it:
+
+```powershell
+New-NetIPAddress -InterfaceAlias "Ethernet 3" -IPAddress 192.168.1.50 -PrefixLength 24
+```
+
+**No gateway on purpose** — that's what stops the Jetson hijacking the default
+route (see ["Plugging in the cable kills my Wi-Fi"](#plugging-in-the-cable-kills-my-wi-fi)).
+
+Confirmed: this **coexists with ICS's `192.168.137.1` on the same adapter** and
+persists across reboots, which the doc predicted and macOS cannot do. Useful as a
+lifeline while debugging. **Note ICS wipes it when you enable sharing**, so re-add
+it afterwards if you want the fallback. Students shouldn't need this — the
+`eth0:1` stanza is removed from their image.
 
 **Open risk, no workaround.** University-managed Windows laptops sometimes
-**disable ICS by group policy**. With live installs on the critical path, an
-affected student is stuck. Needs a fallback plan (a spare Mac? a pre-baked image?)
-decided before the workshop, not during it.
-
-### To verify on the Windows desktop
-
-1. Does ICS actually give a DHCP-client Jetson internet out of the box?
-2. Does `ssh jetson@jetson-2gnano.local` resolve? (Windows 10 1703+ has native
-   mDNS, but confirm — it's the whole handout.)
-3. Is the firewall rule really needed for the relay, and does that command work?
-4. Can the checks in `setup-internet-sharing-macos.sh` be ported to PowerShell?
-   `ipconfig`, `arp -a`, `Get-NetIPAddress`, `Test-NetConnection` are the analogues.
+**disable ICS by group policy**. Untested — the dev laptop is unmanaged. With live
+installs on the critical path, an affected student is stuck. Still needs a
+fallback plan (a spare Mac? a pre-baked image?) decided before the workshop.
