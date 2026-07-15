@@ -1,0 +1,8 @@
+numpy
+opencv-python           # on a headless test server use opencv-python-headless
+requests
+fastapi
+uvicorn[standard]
+pydantic
+sounddevice             # optional: only for the real microphone path
+anthropic               # optional: only if the relay calls an LLM

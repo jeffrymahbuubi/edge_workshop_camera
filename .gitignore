@@ -1,0 +1,51 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Node
+node_modules/
+
+# Disk images — 50GB+ raw SD clones. GitHub hard-blocks files over 100MB.
+# Jetson2G_SEA_APRILTAG_250422.img is also a SEA/AprilTag build, unrelated to
+# this workshop. Keep these out of git entirely; they are not versionable.
+*.img
+*.img.gz
+*.img.xz
+
+# Secrets
+.env
+.env.*
+
+# Local AI-tooling setup (claude-flow / ruflo). Kept on disk, kept out of the
+# repo: this project is followed along by hand and needs none of it.
+.claude/
+.claude-flow/
+.swarm/
+CLAUDE.md
+.mcp.json
+.env.example
+config/
+package.json
+package-lock.json
+docs/claude-flow/
+scripts/claude-with-env.sh
+scripts/claude-with-env.ps1
+# A generic claude-flow starter template copied in for reference. Not part of
+# this project.
+references/claude-flow-starter-unix-version/
+
+# Editor / OS
+*.db
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Build output
+dist/
+build/
