@@ -32,9 +32,14 @@ package-lock.json
 docs/claude-flow/
 scripts/claude-with-env.sh
 scripts/claude-with-env.ps1
-# A generic claude-flow starter template copied in for reference. Not part of
-# this project.
+# Generic claude-flow starter templates copied in for reference. Tooling, not
+# part of this project.
 references/claude-flow-starter-unix-version/
+references/claude-flow-starter-windows-version/
+
+# Upstream NVIDIA Jetson material copied in for reference (~140MB). Not ours to
+# version, and far too large to belong in this repo.
+references/nvidia-jetson/
 
 # Editor / OS
 *.db
