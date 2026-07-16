@@ -215,6 +215,23 @@ $ pgrep -a dhclient
 
 ---
 
+## When the Jetson is the voice-assistant class board
+
+Verified end-to-end on that board, 2026-07-17. The class image answers at
+**`192.168.1.100`**, so students must use **`192.168.1.1`** as `<LAPTOP_IP>` in Step 10 of
+the README — not the `192.168.137.1` the README's Step 6 shows as its example.
+
+The dongle has to carry **both** addresses: enable ICS onto the dongle as above (ICS takes
+`192.168.137.1` for itself), then add `192.168.1.1` as a *secondary* address — GUI: adapter
+→ Properties → IPv4 → **Advanced… → Add**, `192.168.1.1` / `255.255.255.0`; CLI: the class
+README's `netsh interface ip add address` one-liner. Re-enabling ICS **wipes the secondary
+address** — re-add it every time sharing is toggled.
+
+Two things the class image already has, so nobody should redo them: the default route via
+`192.168.1.1` (the class README's `sudo ip route add …` step is unnecessary) and DNS
+(`8.8.8.8`). One thing it does **not** have: `sounddevice` — without it the workshop's
+`audio` reads `0.0000` forever. The README's Step 9 now covers both the check and the fix.
+
 ## When it breaks
 
 | Symptom | What to do |

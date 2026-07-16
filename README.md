@@ -245,6 +245,15 @@ ip addr           # Linux
 ifconfig          # macOS
 ```
 
+> **Seeing two addresses on that adapter?** A laptop that also ran the voice-assistant
+> class setup shows both `192.168.137.1` (Windows sharing's own address) and `192.168.1.1`
+> (added for that class's Jetson). Pick the one on the *Jetson's* subnet:
+>
+> | Your Jetson answers at | Use as `<LAPTOP_IP>` |
+> |---|---|
+> | `192.168.137.100` (workshop image) | `192.168.137.1` |
+> | `192.168.1.100` (voice-assistant class image) | `192.168.1.1` |
+
 Write it down. Below it is written as `<LAPTOP_IP>`.
 
 ### Fallback: if `uv` will not install
@@ -268,6 +277,9 @@ python -m uvicorn relay.relay_server:app --app-dir src --host 0.0.0.0 --port 800
 > tries to compile OpenCV from source on a 4-core ARM board — it will appear to hang for
 > hours and then fail. The SD image has everything. `pyproject.toml` and `requirements.txt`
 > are for the **laptop only**.
+>
+> The one permitted exception is `sounddevice` in Step 9 — pure Python, nothing to compile,
+> installs in seconds. It only comes up if your Jetson was imaged for a different course.
 
 ### Step 7. Plug in the camera
 
@@ -297,7 +309,26 @@ Everything below runs from **`edge_workshop_camera/src`**.
 
 **A dead microphone looks exactly like a healthy one.** No error, no warning; `audio` simply
 reads `0.0` forever and Modes 1 and 2 can never raise a fall. This is the single most
-expensive failure in this project, so prove it before you perform for the camera:
+expensive failure in this project, and it has **two** independent causes. Prove both before
+you perform for the camera.
+
+**First, the library.** Audio capture uses `sounddevice`, and the code degrades gracefully
+when it is missing — to silence. The workshop SD image ships it; a Jetson imaged for a
+different course may not:
+
+```bash
+python3 -c "import sounddevice" && echo OK
+```
+
+`OK` means move on. `ModuleNotFoundError` means install it — this is the one `pip install`
+the warning above permits (pure Python, nothing to compile; needs internet, ~10 seconds):
+
+```bash
+sudo apt-get install -y libportaudio2
+pip3 install --user sounddevice
+```
+
+**Second, the source.** PulseAudio must actually be listening to the webcam:
 
 ```bash
 pactl info | grep 'Default Source'
@@ -434,8 +465,13 @@ Each of these looks like broken code. None of them are.
 
 <br>
 
-PulseAudio defaults to the Nano's **onboard jack**, which has nothing plugged into it — so
-your program records digital silence while `lsusb` and `arecord` insist the webcam is fine.
+Two independent causes produce identical silence. Check the library first — if
+`python3 -c "import sounddevice"` fails, the capture code has quietly given up; install it
+as shown in Step 9.
+
+Otherwise: PulseAudio defaults to the Nano's **onboard jack**, which has nothing plugged
+into it — so your program records digital silence while `lsusb` and `arecord` insist the
+webcam is fine.
 
 Prove it, then fix it permanently (a runtime `pactl set-default-source` does **not** survive
 a reboot):
