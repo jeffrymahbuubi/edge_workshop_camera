@@ -13,7 +13,7 @@ import { UI, FLAGS, PROVENANCE, WHY_BLANK, MODE_INFO, MODE_IDS } from "/content.
 // with no live data, and app.js had reached CLAUDE.md's 500-line limit.
 import { renderCompare, wireCompare } from "/compare.js";
 // The audible fall alarm (SPEC-09) -- its own module for the same reason.
-import { setFallAlarm } from "/alarm.js";
+import { setFallAlarm, alarmHoldOff } from "/alarm.js";
 
 const DEVICE = new URLSearchParams(location.search).get("device") || "bench01";
 const WINDOW_S = 60;          // chart window, matches the relay's ring buffer
@@ -378,6 +378,9 @@ function connect() {
     connState = "connected";
     $("conn").textContent = t(connState);
     $("conn").setAttribute("status", "success");
+    // The ring-buffer replay arrives right after this: a replayed FALL? must
+    // repaint the banner history but not sound the siren (SPEC-09).
+    alarmHoldOff();
   };
   es.onmessage = (m) => {
     try { onEvent(JSON.parse(m.data)); } catch (e) { console.error("bad event", e); }

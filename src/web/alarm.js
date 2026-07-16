@@ -4,7 +4,7 @@
 // siren (Web Audio, synthesized -- no file in the repo, works with the venue
 // offline) followed by a spoken "Fall detected" (SpeechSynthesis).
 //
-// Two constraints shape this file:
+// Three constraints shape this file:
 //
 //  * AUTOPLAY. Browsers refuse to start audio before the user has interacted
 //    with the page. The AudioContext is created/resumed by the first
@@ -12,22 +12,39 @@
 //    arms the alarm, so the normal flow needs zero extra steps. If a fall is
 //    already showing when that first gesture lands, sounding starts then.
 //
+//  * THE FALL IS A PULSE, NOT A STATE. In Modes 1/2 `fall_suspected` is true
+//    only for the one second where loud + was-moving + now-still coincide
+//    (features.py) -- the next event clears it. Jeffry's first hardware test
+//    proved it: the siren started and was cut mid-wail, and the words never
+//    played. So once the alarm begins it is LATCHED for one full cycle
+//    (MIN_SOUND_MS): a falling edge inside the latch schedules the stop for
+//    the latch's end instead of executing it. Past the latch, a falling edge
+//    stops everything immediately -- the person got up, the room goes quiet.
+//
 //  * REPLAY. On (re)connect the relay replays its 60 s ring buffer through the
 //    same render path (SPEC-03), so a FALL? from a minute ago repaints the
 //    banner history and must NOT sound the siren. Clocks cannot be compared --
-//    an ngrok viewer (SPEC-08) does not share the relay's clock -- so the gate
-//    is wall time HERE: the fall must hold for HOLD_MS before the first sound.
-//    The replay burst flashes past in milliseconds and can never hold that
-//    long; a real fall is held >= 3 s by the edge rule, so it always qualifies.
-//    Costs 1.5 s of alarm latency; the banner stays instant.
+//    an ngrok viewer (SPEC-08) does not share the relay's clock -- but the
+//    replay has a tell that IS local: it arrives in the first moments of the
+//    connection. app.js calls alarmHoldOff() on every EventSource open, and a
+//    rising edge inside that window is deferred to the window's end -- where a
+//    replayed clear will have cancelled it, while a genuinely-still-active
+//    fall (the banner agrees) begins late but begins. A LIVE fall on an open
+//    connection starts the siren with no delay at all.
 
-const HOLD_MS = 1500;    // the replay gate -- see above before changing
-const CYCLE_MS = 4000;   // siren (1.6 s) + speech + a breath, then again
+const HOLDOFF_MS = 2000;    // the replay window after a connect -- see above
+const CYCLE_MS = 4000;      // siren (1.6 s) + speech + a breath, then again
+const MIN_SOUND_MS = 3800;  // the latch: one full cycle, deliberately < CYCLE_MS
+                            // so a latched stop always lands before cycle two
 
 let ctx = null;          // AudioContext -- created on first gesture, NEVER before
+let fallActive = false;  // the banner's boolean, mirrored
 let sounding = false;
 let cycles = 0;          // total cycles ever played (verification reads this)
-let holdTimer = null;    // pending rising edge, cancelled if the fall clears
+let beganAt = 0;         // when sounding started, for the latch arithmetic
+let holdoffUntil = 0;    // rising edges before this instant are replay-suspect
+let pendingBegin = null; // begin deferred to the holdoff's end
+let pendingStop = null;  // stop deferred to the latch's end
 let repeatTimer = null;
 let curGain = null;      // the playing siren's gain, so stop() can cut its tail
 let spoken = { text: "Fall detected", lang: "en-US" };
@@ -75,26 +92,28 @@ function speak() {
 function cycle() {
   if (!sounding || !ctx || ctx.state !== "running") return;  // not unlocked yet
   const ms = siren();
+  // `sounding`, not `fallActive`: inside the latch the fall may already have
+  // cleared, and the whole point of the latch is that the words still play.
   setTimeout(() => { if (sounding) speak(); }, ms);
   cycles++;
 }
 
 function begin() {
-  holdTimer = null;
+  pendingBegin = null;
   sounding = true;
+  beganAt = performance.now();
   console.log("fall-alarm: sounding");
   cycle();
   repeatTimer = setInterval(cycle, CYCLE_MS);
 }
 
 function stop() {
-  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  pendingStop = null;
   if (!sounding) return;
   sounding = false;
   clearInterval(repeatTimer);
   repeatTimer = null;
-  // Cut the playing siren's tail and any speech mid-word: the person got up,
-  // the room should go quiet NOW, not 1.6 s from now.
+  // Cut the playing siren's tail and any speech mid-word.
   if (curGain) {
     curGain.gain.cancelScheduledValues(ctx.currentTime);
     curGain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.02);
@@ -104,14 +123,34 @@ function stop() {
   console.log("fall-alarm: stopped");
 }
 
+// Called by app.js on EVERY EventSource open (first connect and reconnects) --
+// the ring-buffer replay arrives in the moments right after this.
+export function alarmHoldOff() {
+  holdoffUntil = performance.now() + HOLDOFF_MS;
+}
+
 // Called from renderStatus() on EVERY event with the banner's own boolean --
-// edge detection happens here, so app.js stays one line.
+// all edge detection happens here, so app.js stays one line.
 export function setFallAlarm(on, text, lang) {
   spoken = { text, lang: lang === "zh" ? "zh-TW" : "en-US" };
+  if (on === fallActive) return;
+  fallActive = on;
+
   if (on) {
-    if (!sounding && !holdTimer) holdTimer = setTimeout(begin, HOLD_MS);
+    // The fall came back while a latched stop was pending: keep sounding.
+    if (pendingStop) { clearTimeout(pendingStop); pendingStop = null; }
+    if (sounding || pendingBegin) return;
+    const wait = holdoffUntil - performance.now();
+    if (wait > 0) pendingBegin = setTimeout(begin, wait);   // replay-suspect
+    else begin();                                           // live: no delay
   } else {
-    stop();
+    // A clear during the holdoff window is the replay finishing its story --
+    // exactly the case the deferred begin exists to cancel.
+    if (pendingBegin) { clearTimeout(pendingBegin); pendingBegin = null; }
+    if (!sounding) return;
+    const played = performance.now() - beganAt;
+    if (played >= MIN_SOUND_MS) stop();
+    else pendingStop = setTimeout(stop, MIN_SOUND_MS - played);  // the latch
   }
 }
 
