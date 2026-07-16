@@ -3,6 +3,24 @@
 # Sets up Internet Connection Sharing from your Wi-Fi to the Jetson's cable,
 # then checks every layer between them and names whatever is broken.
 #
+# This script is LAPTOP-SIDE ONLY. It never touches the Jetson.
+#
+# THE PAIRING IS WINDOWS-SPECIFIC, BY DESIGN. Read this before changing
+# addresses. Every OS hardcodes a different subnet for sharing and NATs only for
+# its own: Windows ICS 192.168.137.0/24, macOS 192.168.2.0/24, Linux NM
+# 10.42.0.0/24. None are configurable. So the workshop pairs an OS-specific
+# laptop script with a Jetson image pinned to that OS's subnet:
+#
+#     this script  +  Jetson eth0 static 192.168.137.100   -> Windows
+#     the .sh one  +  a Jetson pinned to 192.168.2.x        -> macOS
+#
+# A Jetson baked for one of those is UNREACHABLE from the other, and no
+# laptop-side script can fix that — the Jetson would have to be re-imaged. That
+# is accepted: a given Jetson serves one host OS at a time. This workshop is
+# Windows-only (confirmed 2026-07-16), so the image ships at 192.168.137.100.
+# If that ever changes, see docs/09-internet-sharing-setup.md, which explains
+# why the DHCP alternative exists and what it costs.
+#
 # Unlike the macOS script (which is read-only, because macOS has no supported
 # CLI for Internet Sharing), this one configures ICS for you. Windows exposes a
 # documented COM API (HNetCfg.HNetShare), and the step it automates — picking
@@ -27,7 +45,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $JETSON_USER  = 'jetson'
-$JETSON_NAME  = 'jetson-2gnano.mshome.net'  # ICS auto-registers DHCP client names
+$JETSON_IP    = '192.168.137.100'           # static on the Jetson's eth0 — see docs/09
 $SHARED_GW    = '192.168.137.1'             # ICS always uses this. Not configurable.
 $RELAY_PORT   = 8000
 $RELAY_RULE   = 'Workshop Relay 8000'
@@ -193,12 +211,30 @@ $sharedOk = $wifiConn.Config.SharingEnabled -and
             $lanConn.Config.SharingEnabled -and
             $lanConn.Config.SharingConnectionType -eq $ICS_PRIVATE
 
-if ($sharedOk) {
+# The sharing flags alone are NOT proof that ICS is working. ICS puts its
+# address on the adapter itself, so if the flags say "shared" but $SHARED_GW is
+# missing, ICS is only half-configured and nothing will reach the Jetson.
+# This is reachable in practice: editing the adapter's IPv4 settings by hand
+# (ticking "Obtain an IP address automatically", or setting a static address)
+# strips 192.168.137.1 while LEAVING the sharing flags set. ICS never notices
+# and never re-applies it, so the adapter sits on an APIPA 169.254.x.x address.
+# Only an off/on toggle repairs it — so treat a missing address as not-shared.
+$gwPresent = (Get-NetIPAddress -InterfaceIndex $lan.ifIndex -AddressFamily IPv4 `
+    -ErrorAction SilentlyContinue).IPAddress -contains $SHARED_GW
+
+if ($sharedOk -and $gwPresent) {
     Write-Ok "Sharing is ON: $($wifi.Name) -> $($lan.Name)"
 } elseif ($CheckOnly) {
-    Write-Bad "Sharing is not configured as $($wifi.Name) -> $($lan.Name)"
+    if ($sharedOk) {
+        Write-Bad "Sharing is flagged ON but '$($lan.Name)' has no $SHARED_GW — ICS is half-configured"
+    } else {
+        Write-Bad "Sharing is not configured as $($wifi.Name) -> $($lan.Name)"
+    }
     Stop-WithFix 'Re-run this script as Administrator (without -CheckOnly) to configure it.'
 } else {
+    if ($sharedOk -and -not $gwPresent) {
+        Write-Warn "Sharing is flagged ON but '$($lan.Name)' has no $SHARED_GW — forcing a re-toggle"
+    }
     # Clear any existing sharing first. ICS allows exactly one shared pair, and
     # a stale target (a dock adapter, an unplugged built-in port) silently wins.
     foreach ($c in $conns) {
@@ -242,6 +278,11 @@ ICS says it is on but did not configure the adapter. Toggle it off and on:
 
   Win+R > ncpa.cpl > right-click '$($wifi.Name)' > Properties > Sharing tab
   Untick the box > OK > reopen > tick it > choose '$($lan.Name)' > OK
+
+Do NOT set '$($lan.Name)' IPv4 by hand to fix this. ICS owns that address and
+assigns $SHARED_GW itself. Setting it manually — or ticking "Obtain an IP
+address automatically" — strips ICS's address and is what usually causes this
+exact failure. Leave IPv4 alone and let the sharing toggle do the work.
 "@
 }
 
@@ -264,66 +305,65 @@ if ($rule) {
 }
 
 # ---------------------------------------------------------------------------
-Write-Step '5. Jetson picked up an address'
+Write-Step '5. Reaching the Jetson'
 # ---------------------------------------------------------------------------
-# ICS runs a DHCP server and auto-registers each client's hostname under
-# mshome.net, so the name tracks the lease. This matters: ICS hands out a
-# DIFFERENT address on each renew, so no fixed IP can be printed in a handout.
-$jip = $null
+# The Jetson's eth0 is STATIC at $JETSON_IP, inside the 192.168.137.0/24 subnet
+# ICS always uses (the header explains why that pins this pairing to Windows).
+# It buys three things:
+#   - one address that never changes, so the handout can print it
+#   - no name resolution in the path (.local/mDNS is unreliable, and a laptop
+#     running Tailscale has ALL DNS hijacked by an NRPT policy)
+#   - no dhclient on the Jetson, which is what used to fall back to a stale
+#     lease and install a dead default gateway
+# See docs/09-internet-sharing-setup.md > 'Jetson-side config'.
+#
+# Test port 22 rather than ICMP: it is what the student actually needs, and it
+# proves reachability AND sshd in a single check. Poll it, because the Jetson
+# may still be booting and because the first packet after ICS re-toggles loses
+# a race with ARP resolution (observed on hardware: ping failed once, then 4/4).
+$jip = $JETSON_IP
+$sshOk = $false
 foreach ($i in 1..20) {
-    $r = Resolve-DnsName -Name $JETSON_NAME -ErrorAction SilentlyContinue |
-         Where-Object { $_.IPAddress } | Select-Object -First 1
-    if ($r) { $jip = $r.IPAddress; break }
+    if ((Test-NetConnection -ComputerName $jip -Port 22 `
+            -WarningAction SilentlyContinue).TcpTestSucceeded) {
+        $sshOk = $true; break
+    }
     Start-Sleep -Seconds 3
 }
 
-if (-not $jip) {
-    Write-Bad "$JETSON_NAME did not resolve — no Jetson lease"
+if (-not $sshOk) {
+    # Only now is ICMP worth asking: it separates "nothing there" from "host is
+    # up but sshd is down", which have completely different fixes.
+    if (Test-Connection -ComputerName $jip -Count 2 -Quiet -ErrorAction SilentlyContinue) {
+        Write-Bad "Jetson answers at $jip but SSH port 22 is closed"
+        Stop-WithFix @"
+The Jetson is on the network but is not accepting SSH, so its sshd is not
+running. This needs a monitor or serial console on the Jetson itself.
+"@
+    }
+    Write-Bad "Jetson does not answer at $jip"
     Stop-WithFix @"
-Your laptop is sharing, but the Jetson never asked for an address. Usually:
+Your laptop is sharing correctly, but nothing replies at $jip. Usually:
   - the Jetson is still booting (give it ~40s after power-on, then retry)
   - the Jetson is not powered on
   - the cable is loose at the Jetson end
 
-If it stays broken, the Jetson's eth0 may not be on DHCP. That is a Jetson-side
-fix — see docs/09-internet-sharing-setup.md > 'Jetson-side config'.
+If it stays broken, the Jetson's eth0 may not be set to the static address
+$jip. That is a Jetson-side fix — see docs/09-internet-sharing-setup.md >
+'Jetson-side config'.
 "@
 }
-Write-Ok "$JETSON_NAME resolves to $jip"
-
-# ---------------------------------------------------------------------------
-Write-Step '6. Reaching the Jetson'
-# ---------------------------------------------------------------------------
-if (Test-Connection -ComputerName $jip -Count 2 -Quiet -ErrorAction SilentlyContinue) {
-    Write-Ok "Jetson answers at $jip"
-} else {
-    Write-Bad "Jetson has a lease but does not respond at $jip"
-    Stop-WithFix @"
-The lease may be stale (from a previous boot). Power-cycle the Jetson, wait
-~40 seconds, and run this again.
-"@
-}
-
-$ssh = Test-NetConnection -ComputerName $jip -Port 22 -WarningAction SilentlyContinue
-if ($ssh.TcpTestSucceeded) {
-    Write-Ok 'SSH port is open'
-} else {
-    Write-Bad 'SSH port 22 is closed on the Jetson'
-    Stop-WithFix @"
-The Jetson is reachable but not accepting SSH. Its sshd may not be running.
-This needs a monitor or serial console on the Jetson itself.
-"@
-}
+Write-Ok "Jetson answers at $jip, SSH is open"
 
 # ---------------------------------------------------------------------------
 Write-Host "`n=== ALL CHECKS PASSED ===" -ForegroundColor Green
 Write-Host "`nConnect to your Jetson with:`n"
-Write-Host "    ssh $JETSON_USER@$JETSON_NAME" -ForegroundColor White
-Write-Host "    (or: ssh $JETSON_USER@$jip)`n"
+Write-Host "    ssh $JETSON_USER@$jip" -ForegroundColor White
+Write-Host ''
 Write-Host "Verify the Jetson has internet, once you are logged in:`n"
 Write-Host "    ping -c2 8.8.8.8      # routing"
 Write-Host "    ping -c2 google.com   # DNS`n"
-Write-Host "The Jetson finds this laptop automatically as its default gateway:"
+Write-Host "The Jetson's default gateway is hardcoded to this laptop:"
 Write-Host "    ip route | awk '/^default/{print `$3}'   ->  $SHARED_GW`n"
 Write-Host "Note: ICS often turns itself off after sleep or reboot." -ForegroundColor Yellow
 Write-Host "If the Jetson loses internet later, re-run this script first."
