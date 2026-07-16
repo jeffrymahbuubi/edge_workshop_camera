@@ -1,5 +1,20 @@
 # SPEC-04 — Mode 3: Posture & Fall Detection
 
+> # ⚠️ TWO OF THIS SPEC'S RULES WERE REVERSED — SEE [SPEC-08](SPEC-08-mode3-multimodal-and-preview.md)
+>
+> Jeffry's call, 2026-07-16, **after** this spec was written and after he tried to run
+> the live test himself. **Do not act on §3.1's "no sound" or §4.1's "no pixels, ever"
+> without reading SPEC-08 first** — both moved, for reasons recorded there.
+>
+> | Where | This spec says | Now |
+> |---|---|---|
+> | §3.1, §4 | Mode 3 is **keypoints only — no sound**; imports nothing from `common.features` | **Sound is fused in** as *corroboration* — a thump fires a fall in ~1 s instead of 3 s, but **never gates** it. `loud=False` ⇒ byte-identical to this spec. SPEC-08 §A |
+> | §4.1 | **Mode B rejected.** Pixels never travel from Mode 3 | **Pixels may travel** behind an explicit, **default-OFF, non-sticky** toggle on a **separate endpoint**. `/ingest_posture`'s contract here is **unchanged and still absolute**. SPEC-08 §B |
+>
+> What did **not** change: `behaviour.py` is still backend-agnostic (it takes a `bool`,
+> never a keypoint), Mode 2's **video** detector still may not ride along, and no pixel
+> may ever enter `_payload()`.
+
 > # ✅ REBUILT ON MoveNet — 2026-07-16
 >
 > **Mode 3 is deep-learning keypoints, and nothing else.** The colleague built and
@@ -488,11 +503,14 @@ fade, box-shape posture) are **all gone with the backend**. What remains is inhe
 - [x] ~~Measure the real fade time before fixing `FALL_HOLD_S`~~ — answered: there is no
       fade under MoveNet (§1.2).
 - [ ] Does Mode 3 replace Mode 2 in the demo flow, or run as a fourth position after it?
-- [ ] **Mode 3 has no audio, by design** (Jeffry, 2026-07-16: keypoints only). Worth
-      knowing that this makes Modes 1/2 and Mode 3 answer *different questions* — "was
-      there a thump and did motion stop?" vs "was this person upright and are they now
-      lying?" — so their `FALL?` flags are not directly comparable. That is a teaching
-      point to state out loud, not a bug to fix.
+- [x] ~~**Mode 3 has no audio, by design**~~ — **ANSWERED, AND REVERSED, 2026-07-16**
+      (SPEC-08 Part A). This entry said the mode difference was "a teaching point to state
+      out loud, not a bug to fix". Jeffry's counter, later the same day: the workshop is
+      called **Multi-Modal** Posture Recognition, and the mode being showcased was the only
+      uni-modal one — that is not a teaching point, it is a hole. Mode 3 now fuses sound as
+      **corroboration** (faster, never gated). The modes *still* answer different questions
+      and their `FALL?` flags are *still* not directly comparable — that part was right and
+      remains worth saying out loud.
 - [ ] Commit the 4.7 MB `movenet_lightning.tflite`, or bake it into the SD image? It lives
       at `src/models/`. The old SPEC-05 argued against committing 81 MB of weights; 4.7 MB
       is a different question, and committing keeps the repo self-contained for an offline

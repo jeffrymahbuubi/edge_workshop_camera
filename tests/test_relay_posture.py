@@ -66,3 +66,50 @@ def test_bad_token_is_rejected():
     r = client.post("/ingest_posture", json={"posture": "standing"},
                     headers={"X-Device-Token": "nope"})
     assert r.status_code == 401
+
+
+# --- multi-modal fusion (SPEC-08 Part A) --------------------------------
+
+def test_the_audio_scalars_survive_the_round_trip():
+    """⚠️ Pydantic SILENTLY DROPS fields the model does not declare.
+
+    Mode 3 would post audio_rms + loud_flag, the relay would accept 200, and the
+    dashboard would simply never see them -- no error anywhere. This test exists
+    because that failure looks exactly like success.
+    """
+    r = post(posture="lying", audio_rms=0.1740, loud_flag=True)
+    assert r.status_code == 200
+    from relay.relay_server import PosturePayload
+    p = PosturePayload(**{"posture": "lying", "audio_rms": 0.174,
+                          "loud_flag": True})
+    assert p.audio_rms == 0.174 and p.loud_flag is True
+
+
+def test_a_pre_fusion_client_still_validates():
+    """The fields are Optional on purpose: a Jetson running yesterday's client
+    must not start 422-ing the moment the relay is upgraded."""
+    r = post()
+    assert r.status_code == 200
+    assert r.json()["flag"] == "person-active"
+
+
+def test_the_loud_slider_reaches_mode_3():
+    """SPEC-08 §A7: Mode 3 listens now, so the dashboard's threshold must reach
+    it -- via the ingest response, the same channel Mode 2 uses.
+
+    Without this the slider silently does nothing in one of the three modes, and
+    a student tuning it would conclude the mic was broken.
+    """
+    client.post("/config", json={"loud_rms_thresh": 0.02}, headers=AUTH)
+    body = post().json()
+    assert body["config"]["loud_rms_thresh"] == 0.02
+    client.post("/config", json={"loud_rms_thresh": 0.05}, headers=AUTH)
+
+
+def test_the_thump_reaches_the_dashboard_event():
+    """The fusion must be watchable (SPEC-08 §A4) -- the scalars have to be in
+    the SSE event, not just accepted at the door."""
+    r = post(posture="lying", abnormal=True,
+             reason="thump + upright→lying held 1s",
+             audio_rms=0.174, loud_flag=True)
+    assert r.json()["flag"] == "FALL?"

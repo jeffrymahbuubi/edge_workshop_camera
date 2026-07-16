@@ -9,9 +9,12 @@ key server-side; devices carry only a revocable token.
 Endpoints (ingest endpoints require header X-Device-Token):
   POST /ingest_raw       <- Mode 1 sends base64 JPEG frames + audio here
   POST /ingest_features  <- Mode 2 sends the small feature vector here
-  POST /ingest_posture   <- Mode 3 sends posture + abnormal verdict here
+  POST /ingest_posture   <- Mode 3 sends posture + verdict + audio scalars here
+  POST /ingest_preview   <- Mode 3's OPT-IN setup frame (SPEC-08 B; 403 unless on)
   GET  /events           -> SSE stream for the dashboard
-  GET  /latest.jpg       -> most recent Mode 1 frame (404 in Modes 2/3 -- by design)
+  GET  /latest.jpg       -> most recent frame (404 in Modes 2/3 -- by design,
+                            unless the Mode 3 setup preview is explicitly on)
+  GET/POST /preview      -> the Mode 3 setup camera toggle (default OFF, not sticky)
   POST /reset            -> clear byte totals
   GET  /health
 """
@@ -70,6 +73,21 @@ _CFG_BOUNDS = {"loud_rms_thresh": (0.0, 1.0), "motion_level_thresh": (0.0, 1.0)}
 # THREE separate programs stay separate (the boss's structure), and the button
 # just picks which one runs. None = nothing selected / all stopped.
 _desired_mode = {"mode": None}          # 1 | 2 | 3 | None
+
+# The Mode 3 setup preview (SPEC-08 Part B) -- the ONE way camera pixels may
+# leave the Jetson, and every word of that sentence is load-bearing.
+#
+# WHY IT EXISTS: the Jetson is headless and Mode 3 sends no frames, so a student
+# performing for the camera is BLIND -- they cannot tell if they are in shot, if
+# the floor is visible, or if they are side-on. Framing is the single biggest
+# accuracy factor (SPEC-04 §8), and it was unobservable. That cost two bench
+# passes and a live-test attempt.
+#
+# WHY IT IS OFF BY DEFAULT AND NOT STICKY: Mode 3's default behaviour is what the
+# workshop demonstrates and what the ratio quotes. A student who leaves this on
+# must not silently teach the next student that Mode 3 costs 583 KB/s. POST /mode
+# clears it, so every arrival into Mode 3 gets the pure default.
+_preview = {"camera": False}
 
 LLM_MODEL = os.environ.get("LLM_MODEL", "claude-sonnet-5")
 
@@ -168,6 +186,23 @@ class FeaturePayload(BaseModel):
     context: str = ""
 
 
+class PreviewPayload(BaseModel):
+    """A setup frame (SPEC-08 Part B). SEPARATE from PosturePayload, on purpose.
+
+    The obvious design is an optional `image` field on PosturePayload. It was
+    rejected: Mode 3's payload contract is the workshop's privacy claim, and a
+    field that is *usually* absent is one bad default away from always present.
+    Keeping pixels in their own model on their own endpoint means
+    `test_raw_pixels_never_travel` stays absolute and unchanged -- the preview is
+    visibly a different thing, not a hole in the contract.
+    """
+    image: str                          # base64 JPEG
+
+
+class PreviewPatch(BaseModel):
+    camera: bool
+
+
 class PosturePayload(BaseModel):
     posture: str                       # standing|walking|sitting|lying|absent
     abnormal: bool = False
@@ -179,6 +214,12 @@ class PosturePayload(BaseModel):
     keypoints: Optional[List[List[float]]] = None
     bbox: Optional[List[float]] = None          # [x, y, w, h], normalised 0..1
     score: Optional[float] = None               # mean confidence of trusted joints
+    # What the mic contributed (SPEC-08 §A5). TWO SCALARS -- never samples. Mode 3
+    # fuses these on the Jetson to decide whether a thump corroborated the drop;
+    # they ride along so the dashboard can SHOW the fusion, which is otherwise
+    # invisible. Optional: a client predating SPEC-08 still validates.
+    audio_rms: Optional[float] = None
+    loud_flag: Optional[bool] = None
     backend: str = "movenet"
     context: str = ""
 
@@ -206,9 +247,24 @@ def dashboard():
                         headers={"Cache-Control": "no-store"})
 
 
-@app.get("/app.js")
-def dashboard_js():
-    return FileResponse(WEB_DIR / "app.js", media_type="application/javascript",
+# The dashboard's ES modules. A WHITELIST, not a directory listing: `name` comes
+# straight off the URL, so serving WEB_DIR/f"{name}.js" unchecked would hand a
+# path-traversal (`/..%2f..%2fsecrets.js`) a file read. The set is three entries
+# and the dashboard is not going to grow dozens.
+#
+#   app     -- the live instrument (SSE, chart, status, tuning, mode switch)
+#   content -- all copy, both languages (SPEC-03 §9)
+#   compare -- the three-mode teaching section (static; split out when app.js
+#              hit CLAUDE.md's 500-line limit)
+_JS_MODULES = {"app", "content", "compare"}
+
+
+@app.get("/{name}.js")
+def dashboard_js(name: str):
+    if name not in _JS_MODULES:
+        raise HTTPException(404, "no such module")
+    return FileResponse(WEB_DIR / f"{name}.js",
+                        media_type="application/javascript",
                         headers={"Cache-Control": "no-store"})
 
 
@@ -287,7 +343,16 @@ async def ingest_posture(p: PosturePayload, request: Request,
     # Mode 3 sends no image, so drop any frame Mode 1 left behind: a stale face
     # lingering in the video panel would wreck the privacy demo. The skeleton
     # arrives as coordinates and is drawn by the browser -- never as pixels.
-    _latest_jpeg.pop(device, None)
+    #
+    # ⚠️ UNLESS the student opted into the setup preview (SPEC-08 §B5). This pop
+    # runs EVERY TICK, so with a preview live it would delete each frame roughly a
+    # second after it arrived -- the panel would flicker or stay black and read as
+    # a camera fault rather than a design collision. This is exactly why posting
+    # frames to /ingest_raw alongside posture does not work, and it is recorded in
+    # SPEC-04 §6 as an already-paid lesson. The pop is NOT deleted: with the
+    # preview off it is still what stops a Mode 1 face lingering into Mode 3.
+    if not _preview["camera"]:
+        _latest_jpeg.pop(device, None)
 
     if p.abnormal:
         flag = "FALL?"
@@ -300,7 +365,16 @@ async def ingest_posture(p: PosturePayload, request: Request,
         flag = "quiet"
 
     await _publish(_event(device, 3, flag, posture=p.dict()))
-    return {"device": device, "flag": flag, "note": None}
+    # Hand the live thresholds back, exactly as /ingest_features does. Mode 3
+    # listens as of SPEC-08 §A7, so the dashboard's loud slider must reach it --
+    # otherwise the slider silently lies in one of the three modes. The FUSION
+    # still happens on the Jetson; the relay only supplies the number.
+    # `preview` rides the same channel as `config` -- the Jetson learns whether
+    # the student wants pixels without a second poll (SPEC-08 §B5). Relay holds
+    # the state, the edge polls it: the same shape as SPEC-06 and SPEC-07, and it
+    # crosses the firewall/NAT exactly like the ingest path already does.
+    return {"device": device, "flag": flag, "note": None,
+            "config": dict(_live_cfg), "preview": _preview["camera"]}
 
 
 @app.get("/latest.jpg")
@@ -350,7 +424,59 @@ def set_mode(patch: ModePatch):
     if patch.mode not in (1, 2, 3, None):
         raise HTTPException(422, "mode must be 1, 2, 3 or null")
     _desired_mode["mode"] = patch.mode
+    # The setup preview is NOT STICKY (SPEC-08 §B4). Every path into Mode 3 comes
+    # through here, so clearing it is what makes "default OFF" true on arrival
+    # rather than only on first boot -- including re-selecting Mode 3.
+    _preview["camera"] = False
+    _latest_jpeg.clear()
     return dict(_desired_mode)
+
+
+@app.get("/preview")
+def get_preview():
+    """Is the Mode 3 setup camera on? The Jetson reads this from its ingest
+    response; the dashboard reads it here to seed the toggle."""
+    return dict(_preview)
+
+
+@app.post("/preview")
+def set_preview(patch: PreviewPatch):
+    """Turn the setup camera on/off (SPEC-08 Part B).
+
+    Turning it OFF drops the frame immediately rather than waiting for the next
+    posture tick: a face lingering after the student turned pixels off would
+    contradict the exact claim the panel is making at that moment.
+    """
+    _preview["camera"] = bool(patch.camera)
+    if not _preview["camera"]:
+        _latest_jpeg.clear()
+    return dict(_preview)
+
+
+@app.post("/ingest_preview")
+async def ingest_preview(p: PreviewPayload, request: Request,
+                         x_device_token: str = Header(...)):
+    """A setup frame from Mode 3 -- the ONE path pixels may take (SPEC-08 §B5).
+
+    Note what this does NOT do: it does not touch `live_mode`, it does not record
+    into Mode 1/2/3's buckets, and it does not publish an event. The relay is in
+    Mode 3 and stays there; only the video panel changes.
+    """
+    info = auth(x_device_token)
+    device = info["device"]
+    rate(device)
+
+    # The toggle is a GATE, not a suggestion. The client polls the flag and
+    # should never post while off -- but "should never" is how a raw frame ends
+    # up on the LAN, and this is the one invariant the whole mode rests on.
+    if not _preview["camera"]:
+        raise HTTPException(403, "preview is off -- Mode 3 sends no pixels")
+
+    # Its OWN bucket, never mode3's: Mode 3's ~562 B is the number the workshop
+    # quotes, and the two figures side by side are the lesson (SPEC-08 §B3).
+    bandwidth.record(device, "preview", _content_length(request))
+    _latest_jpeg[device] = base64.b64decode(p.image)
+    return {"device": device, "preview": True}
 
 
 @app.post("/reset")

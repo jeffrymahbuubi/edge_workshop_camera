@@ -32,8 +32,33 @@
     body {
       margin: 0; padding: var(--gap);
       max-width: 68rem; margin-inline: auto;
-      font-family: Inter, system-ui, sans-serif;
+      /* Inter ships NO CJK GLYPHS, and the workshop LAN has no internet to fetch
+         one -- so 繁體中文 would render as tofu boxes (□□□) with the old stack.
+         A CJK webfont is several MB; the system faces are already on every
+         machine in the room and cost nothing. Microsoft JhengHei = Windows,
+         PingFang TC = macOS, Noto Sans TC = Linux. Latin still resolves to Inter
+         first, so English is unchanged. */
+      font-family: Inter, "Microsoft JhengHei", "PingFang TC", "Noto Sans TC",
+                   system-ui, sans-serif;
     }
+    /* ⚠️ THIS ONE LINE IS THE CENTRING FIX. Do not fold it into `body` above.
+       themes.css ships `[nve-theme] body { margin: 0 }` -- specificity (0,1,1),
+       because an ATTRIBUTE selector scores in the class column, which outranks
+       ANY number of element selectors. So the bare `body { margin-inline: auto }`
+       above is (0,0,1) and loses; the page sat hard against the left edge with
+       margin-left computed to 0px. (`html body` does not help either: (0,0,2)
+       still has a 0 in the class column. That was tried, and the browser said no.)
+       `html[nve-theme] body` is (0,1,2) and wins cleanly -- no !important, which
+       would only have hidden the cause from whoever reads this next.
+
+       THE TRAP WORTH REMEMBERING: this bug was CAUSED BY THE DARK-THEME FIX.
+       While nve-theme sat on <body>, `[nve-theme] body` matched NOTHING and
+       centring worked by luck. Moving the attribute up to <html> -- correct, and
+       required for dark mode to render at all -- silently switched this rule on.
+       One fix, one regression, and nothing in either connected them.
+
+       Verified in-browser (playwright-cli, 1280px viewport): 0px -> 96px each side. */
+    html[nve-theme] body { margin-inline: auto; }
     header { display: flex; align-items: center; gap: var(--gap); margin-block-end: var(--gap); }
     header h1 { margin: 0; font-size: 1.05rem; font-weight: 600; flex: 1; }
 
@@ -143,12 +168,103 @@
        doing nothing. An ID selector here beats the component's :host display. */
     #fall-alert { display: none; }
     #fall-alert[data-open] { display: block; }
+
+    /* --- the setup preview (SPEC-08 Part B) --- */
+    /* Same data-open discipline as the fall banner, and for the same reason:
+       nve-alert does not observe an `open` attribute. */
+    #preview-banner { display: none; margin-block-end: var(--gap); }
+    #preview-banner[data-open] { display: block; }
+    .preview-btn {
+      font: inherit; font-size: .68rem; padding: .1rem .5rem; cursor: pointer;
+      border: 1px solid var(--panel-line); border-radius: .4rem;
+      background: transparent; color: inherit; opacity: .8;
+      text-transform: none; letter-spacing: 0; font-weight: 500;
+    }
+    .preview-btn:hover { background: rgba(128,128,128,.12); opacity: 1; }
+    /* ON is deliberately loud. The panel must never quietly look like Mode 1
+       while claiming to be Mode 3 -- a student who cannot tell the pixels are
+       flowing learns the OPPOSITE of the lesson. */
+    .preview-btn.on { background: var(--danger); border-color: var(--danger);
+                      color: #fff; opacity: 1; font-weight: 600; }
+    .panel h2.with-action { display: flex; align-items: center;
+                            justify-content: space-between; gap: .5rem; }
+
+    /* --- how to trigger FALL (student-facing, follows the active mode) --- */
+    .howto-mode { font-size: .62rem; font-weight: 600; letter-spacing: .04em;
+      color: var(--motion); border: 1px solid var(--motion); border-radius: .5rem;
+      padding: 0 .35rem; text-transform: none; margin-inline-start: .4rem; }
+    /* With no mode selected the pill has no text -- but its border and padding
+       still paint, so the heading rendered as "HOW TO TRIGGER FALL◯" and looked
+       like a broken glyph. Caught by looking at the page, not the code. */
+    .howto-mode:empty { display: none; }
+    .howto { margin: 0; padding-inline-start: 1.1rem; font-size: .82rem;
+             line-height: 1.5; }
+    .howto li { margin-block: .25rem; }
+    .howto li::marker { color: var(--motion); font-weight: 700; }
+    .howto-empty { font-size: .8rem; opacity: .55; margin: 0; }
+
+    /* --- the three-mode comparison (instructor-facing) --- */
+    /* Below the live panel on purpose: an instructor reads it once, a student
+       mid-experiment never needs to scroll here (that is what the card above
+       is for). Both render from the SAME data -- see content.js. */
+    .compare { margin-block-start: 1.6rem; }
+    .compare > h2 { font-size: 1rem; font-weight: 650; margin: 0 0 .3rem; }
+    /* No max-width. These were capped at 60ch/78ch for readability -- the classic
+       typographic measure -- but at this container width that wrapped after about
+       half the line and read as broken layout next to obvious empty space.
+       Jeffry's call: use the width. */
+    .compare-lead { font-size: .84rem; opacity: .75; margin: 0 0 var(--gap);
+                    line-height: 1.5; }
+
+    /* One shared 3-column track for the header and every row body, so the columns
+       cannot drift apart as rows open and close. */
+    .compare-head, .crow-body {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap);
+      align-items: start;
+    }
+    .compare-head { margin-block-end: .5rem; }
+    .chead { display: flex; flex-direction: column; gap: .1rem;
+             padding: .5rem .6rem; border-radius: .5rem;
+             border: 1px solid var(--panel-line); background: var(--panel-bg); }
+    .chead-n { font-size: .62rem; font-weight: 700; letter-spacing: .08em;
+               text-transform: uppercase; opacity: .5; }
+    .chead-t { font-size: .88rem; font-weight: 700; }
+    .chead-tag { font-size: .74rem; opacity: .7; font-style: italic; }
+
+    .crow { border-block-start: 1px solid var(--panel-line); }
+    .crow:last-child { border-block-end: 1px solid var(--panel-line); }
+    .crow-toggle {
+      display: flex; align-items: center; gap: .45rem; width: 100%;
+      font: inherit; font-size: .68rem; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; opacity: .6;
+      background: transparent; border: 0; color: inherit; cursor: pointer;
+      padding: .55rem .2rem; text-align: start;
+    }
+    .crow-toggle:hover { opacity: 1; }
+    .crow-caret { display: inline-block; transition: transform .15s ease;
+                  color: var(--motion); font-size: .7rem; }
+    .crow[data-open] .crow-toggle { opacity: 1; }
+    .crow[data-open] .crow-caret { transform: rotate(90deg); }
+    .crow-body { display: none; padding-block-end: .8rem; }
+    .crow[data-open] .crow-body { display: grid; }
+    @media (max-width: 800px) {
+      .compare-head, .crow[data-open] .crow-body { grid-template-columns: 1fr; }
+    }
+    .ccell p { margin: 0; font-size: .8rem; line-height: 1.5; }
+    .ccell p.senses { font-weight: 600; }
+    .ccell ul { margin: 0; padding-inline-start: 1.1rem;
+                font-size: .78rem; line-height: 1.45; }
+    .ccell li { margin-block: .15rem; }
+    .pros li::marker { content: "✓  "; color: var(--motion); }
+    .cons li::marker { content: "✗  "; color: var(--danger); }
+    .multimodal { margin-block-start: var(--gap); }
+    .multimodal p { margin: 0; font-size: .82rem; line-height: 1.6; }
   </style>
 </head>
 <body>
 
   <header>
-    <h1>Edge Sensing — Live</h1>
+    <h1 id="app-title">Edge Sensing — Live</h1>
     <span class="modes-switch" role="group" aria-label="choose mode">
       <button id="mode1-btn" class="mode-btn" type="button">Mode 1</button>
       <button id="mode2-btn" class="mode-btn" type="button">Mode 2</button>
@@ -156,6 +272,7 @@
     </span>
     <nve-badge id="conn" status="neutral">connecting…</nve-badge>
     <nve-badge id="live-mode" status="neutral">no data</nve-badge>
+    <nve-button id="lang-btn" size="sm">中文</nve-button>
     <nve-button id="theme-btn" size="sm">light</nve-button>
     <nve-button id="reset-btn" size="sm">reset totals</nve-button>
   </header>
@@ -164,78 +281,102 @@
     <span id="fall-text">Fall suspected</span>
   </nve-alert>
 
+  <!-- Shown ONLY while the Mode 3 setup camera is on. Deliberately loud: the
+       whole design rests on pixels being an obvious, temporary exception rather
+       than something a student could leave running without noticing. -->
+  <nve-alert id="preview-banner" status="warning">
+    <span id="preview-banner-text"></span>
+  </nve-alert>
+
   <div class="grid">
     <!-- ================= left ================= -->
     <div class="stack">
       <section class="panel">
-        <h2>Status</h2>
+        <h2 data-i18n="status">Status</h2>
         <div class="flag">
           <nve-dot id="flag-dot" status="neutral"></nve-dot>
           <span class="flag-text" id="flag-text">waiting…</span>
         </div>
 
         <div class="meter">
-          <span class="lbl">motion</span>
+          <span class="lbl" data-i18n="motion">motion</span>
           <span class="bar motion"><i id="motion-bar"></i></span>
           <span class="val" id="motion-val">—</span>
         </div>
         <div class="meter">
-          <span class="lbl">audio</span>
+          <span class="lbl" data-i18n="audio">audio</span>
           <span class="bar audio"><i id="audio-bar"></i></span>
           <span class="val" id="audio-val">—</span>
         </div>
 
         <div class="facts">
-          <span>blobs <b id="blobs">—</b></span>
-          <span>fall <b id="fall">—</b></span>
-          <span>posture <b id="posture">—</b></span>
+          <span><span data-i18n="blobs">blobs</span> <b id="blobs">—</b></span>
+          <span><span data-i18n="fall">fall</span> <b id="fall">—</b></span>
+          <span><span data-i18n="posture">posture</span> <b id="posture">—</b></span>
         </div>
       </section>
 
+      <!-- The student's panel, and the reason this feature exists: reaching FALL
+           was ambiguous, so nobody could experiment without being told how.
+           Sits directly under Status (which shows the CURRENT flag) and directly
+           above the sliders (which are what you reach for when it will not fire).
+           That order is the narrative: what it says now -> how to change it ->
+           how to tune it. Content follows the ACTIVE mode -- see content.js. -->
+      <section class="panel" id="howto-panel">
+        <h2><span data-i18n="howToFall">How to trigger FALL</span>
+            <span class="howto-mode" id="howto-mode"></span></h2>
+        <ol class="howto" id="howto-steps"></ol>
+        <p class="howto-empty" id="howto-empty" data-i18n="pickAMode"></p>
+      </section>
+
       <section class="panel">
-        <h2>Fall sensitivity <span class="tune-live">live</span></h2>
+        <h2><span data-i18n="tuning">Fall sensitivity</span>
+            <span class="tune-live" data-i18n="tuningLive">live</span></h2>
         <div class="tune">
-          <label for="loud-slider">loud threshold <b id="loud-val">—</b></label>
+          <label for="loud-slider"><span data-i18n="loudThreshold">loud threshold</span> <b id="loud-val">—</b></label>
           <input type="range" id="loud-slider" min="0" max="0.2" step="0.005">
         </div>
         <div class="tune">
-          <label for="motion-slider">motion threshold <b id="motion-slider-val">—</b></label>
+          <label for="motion-slider"><span data-i18n="motionThreshold">motion threshold</span> <b id="motion-slider-val">—</b></label>
           <input type="range" id="motion-slider" min="0" max="0.1" step="0.002">
         </div>
-        <p class="tune-hint">
-          Lower <b>loud</b> so quieter sounds count. Raise <b>motion</b> so a small
-          movement still reads as “stopped”. Applies to Mode 1 instantly and Mode 2
-          within a second — the Jetson keeps deciding, the dashboard just feeds the numbers.
-        </p>
+        <p class="tune-hint" data-i18n-html="tuneHint"></p>
       </section>
 
       <section class="panel">
-        <h2>Last 60 seconds</h2>
+        <h2 data-i18n="chart">Last 60 seconds</h2>
         <svg class="chart" id="chart" preserveAspectRatio="none" aria-label="motion and audio, last 60 seconds"></svg>
-        <div class="axis"><span>60s ago</span><span>now</span></div>
+        <div class="axis"><span data-i18n="ago60">60s ago</span><span data-i18n="now">now</span></div>
         <div class="chart-legend">
-          <span><i class="swatch" style="background:var(--motion)"></i>motion</span>
-          <span><i class="swatch" style="background:var(--audio)"></i>audio</span>
+          <span><i class="swatch" style="background:var(--motion)"></i><span data-i18n="motion">motion</span></span>
+          <span><i class="swatch" style="background:var(--audio)"></i><span data-i18n="audio">audio</span></span>
         </div>
       </section>
 
       <section class="panel">
-        <h2>Events</h2>
-        <ul class="log" id="log"><li class="empty">no events yet</li></ul>
+        <h2 data-i18n="events">Events</h2>
+        <ul class="log" id="log"><li class="empty" data-i18n="noEvents">no events yet</li></ul>
       </section>
     </div>
 
     <!-- ================= right ================= -->
     <div class="stack">
       <section class="panel">
-        <h2>What the relay can see</h2>
+        <!-- The toggle lives ON the video panel because that is the thing it
+             changes. It is hidden outside Mode 3: Mode 1 already shows pixels
+             and Mode 2's blankness IS its lesson -- a "show camera" button there
+             would offer to break the very point the panel is making. -->
+        <h2 class="with-action">
+          <span data-i18n="video">What the relay can see</span>
+          <button class="preview-btn" id="preview-btn" type="button" hidden></button>
+        </h2>
         <div class="video-wrap" id="video-wrap">
           <img id="frame" alt="Live frame received by the relay">
           <canvas id="skeleton" width="320" height="240"
                   aria-label="Pose skeleton reconstructed from keypoints"></canvas>
           <div class="placeholder">
             <div class="glyph">⊘</div>
-            <div class="msg">no image</div>
+            <div class="msg" data-i18n="noImage">no image</div>
             <div class="why" id="why-blank">waiting for data…</div>
           </div>
         </div>
@@ -243,19 +384,28 @@
       </section>
 
       <section class="panel">
-        <h2>The lesson — bandwidth</h2>
+        <h2 data-i18n="lesson">The lesson — bandwidth</h2>
         <div class="modes">
-          <span class="name">Mode 1</span>
+          <span class="name" id="m1-name">Mode 1</span>
           <span class="rate" id="m1-rate">—</span>
           <span class="total" id="m1-total">—</span>
 
-          <span class="name">Mode 2</span>
+          <span class="name" id="m2-name">Mode 2</span>
           <span class="rate" id="m2-rate">—</span>
           <span class="total" id="m2-total">—</span>
 
           <span class="name muted" id="m3-name">Mode 3</span>
           <span class="rate muted" id="m3-rate">—</span>
           <span class="total muted" id="m3-total">—</span>
+
+          <!-- The setup camera's OWN row (SPEC-08 §B3). Its bytes are never
+               folded into Mode 3's, so Mode 3's ~600 B stays quotable and the
+               ratio stays honest -- but the cost is right here, next to it, for
+               the student who just turned it on. Seeing 600 B/s and 583 KB/s at
+               the same time is the strongest version of the whole lesson. -->
+          <span class="name muted" id="prev-name">setup camera</span>
+          <span class="rate muted" id="prev-rate">—</span>
+          <span class="total muted" id="prev-total">—</span>
         </div>
         <div class="ratio">
           <div class="num" id="ratio">—</div>
@@ -264,6 +414,23 @@
       </section>
     </div>
   </div>
+
+  <!-- ===== the three modes, side by side =====
+       For the instructor and for management: the project's whole argument,
+       readable without touching the code or clicking anything. Rendered from
+       the same content.js the card above uses, so they cannot disagree. -->
+  <section class="compare">
+    <h2 id="compare-title"></h2>
+    <p class="compare-lead" id="compare-lead"></p>
+    <!-- Mode names stay pinned above the rows; each topic below opens across all
+         three at once, so the columns never fall out of alignment. -->
+    <div class="compare-head" id="compare-head"></div>
+    <div class="compare-rows" id="compare-rows"></div>
+    <section class="panel multimodal">
+      <h2 id="mm-title"></h2>
+      <p id="mm-text"></p>
+    </section>
+  </section>
 
   <script type="module" src="/app.js"></script>
 </body>

@@ -8,6 +8,11 @@
 //   * the chart's TIME axis -- it is what makes pull-the-network legible:
 //     Mode 1 flatlines and loses those seconds forever, Mode 2 backfills.
 
+import { UI, FLAGS, PROVENANCE, WHY_BLANK, MODE_INFO, MODE_IDS } from "/content.js";
+// The comparison section lives in its own module: it is static teaching content
+// with no live data, and app.js had reached CLAUDE.md's 500-line limit.
+import { renderCompare, wireCompare } from "/compare.js";
+
 const DEVICE = new URLSearchParams(location.search).get("device") || "bench01";
 const WINDOW_S = 60;          // chart window, matches the relay's ring buffer
 const GAP_S = 2.5;            // a longer silence than this breaks the line
@@ -18,6 +23,26 @@ const $ = (id) => document.getElementById(id);
 const history = [];           // [{t, motion, audio}]
 let lastFlag = null;
 let latestMode = null;
+let selectedMode = null;      // what the BUTTONS say -- drives the how-to card
+let previewOn = false;
+
+// ⚠️ Language can be switched at ANY time, including before a single event has
+// arrived. Anything painted only by a data path (the flag, the ratio caption,
+// the connection badge) would be stranded in the old language until the next
+// event -- and on an idle dashboard that is forever. So the last value of each
+// is remembered here and repainted by applyLang().
+// This was NOT theoretical: switching to 中文 on a fresh page left "waiting…",
+// "connected" and "run both modes to see the ratio" sitting in English. Found by
+// looking at the rendered page, not by reading the code.
+let lastEvent = null;
+let lastBandwidth = null;
+let connState = "connecting";   // connecting | connected | unreachable
+
+// ---------------------------------------------------------------------- i18n
+// Default English (Jeffry's call). Remembered like the theme.
+const LANG_KEY = "nv-workshop-lang";
+let lang = localStorage.getItem(LANG_KEY) === "zh" ? "zh" : "en";
+const t = (key) => UI[lang][key];
 
 // ---------------------------------------------------------------- formatting
 
@@ -32,13 +57,94 @@ function bytes(n) {
 const rate = (bps) => (bps ? `${bytes(bps)}/s` : "—");
 const clock = (t) => new Date(t * 1000).toLocaleTimeString();
 
+// --------------------------------------------------------- teaching content
+// Both blocks below render from the SAME content.js entry. That is the point of
+// the data module: the card a student reads mid-experiment and the column an
+// instructor reads cannot drift apart, because there is only one copy.
+
+function renderHowTo() {
+  // Follows the SELECTED mode, not the live one: a student presses Mode 3 and
+  // needs the instructions immediately -- not in two seconds when the supervisor
+  // has swapped clients and data starts flowing.
+  const info = selectedMode ? MODE_INFO[selectedMode][lang] : null;
+  const ol = $("howto-steps"), empty = $("howto-empty");
+  $("howto-mode").textContent = selectedMode ? t("inThisMode")(selectedMode) : "";
+  if (!info) {
+    ol.innerHTML = "";
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+  ol.innerHTML = info.how.map((s) => `<li>${s}</li>`).join("");
+}
+
+function renderTeaching() {
+  $("compare-title").textContent = t("compareTitle");
+  $("compare-lead").textContent = t("compareLead");
+  $("mm-title").textContent = t("multimodalTitle");
+  $("mm-text").innerHTML = t("multimodal");
+  renderCompare(lang);        // the rows themselves -- compare.js
+}
+
+function applyLang(next) {
+  lang = next;
+  localStorage.setItem(LANG_KEY, lang);
+  document.documentElement.lang = lang === "zh" ? "zh-TW" : "en";
+
+  // Static labels declare their own key; nothing here needs to know what they say.
+  for (const el of document.querySelectorAll("[data-i18n]")) {
+    el.textContent = t(el.dataset.i18n);
+  }
+  // A few strings carry <b> for emphasis. Separate attribute so the plain path
+  // above stays textContent -- innerHTML everywhere would be an XSS habit, even
+  // though this copy is ours.
+  for (const el of document.querySelectorAll("[data-i18n-html]")) {
+    el.innerHTML = t(el.dataset.i18nHtml);
+  }
+
+  const modeWord = lang === "zh" ? "模式" : "Mode";
+  $("lang-btn").textContent = t("langBtn");
+  $("reset-btn").textContent = t("reset");
+  for (const m of MODE_IDS) {
+    $(`m${m}-name`).textContent = `${modeWord} ${m}`;
+    $(MODE_BTNS[m]).textContent = `${modeWord} ${m}`;
+  }
+  $("prev-name").textContent = t("previewRow");
+
+  // The data-driven strings. Repaint from remembered state, or the page keeps
+  // the old language until the next event -- which never comes when idle.
+  $("conn").textContent = t(connState);
+  if (lastEvent) renderStatus(lastEvent);
+  else $("flag-text").textContent = t("waiting");
+  if (lastBandwidth) {
+    renderBandwidth(lastBandwidth);
+  } else {
+    $("ratio-cap").textContent = t("ratioNone");
+    $("live-mode").textContent = t("noData");
+  }
+  $("preview-banner-text").textContent = t("previewBanner");
+  $("preview-btn").textContent = previewOn ? t("hideCamera") : t("showCamera");
+  $("theme-btn").textContent =
+    document.documentElement.getAttribute("nve-theme").startsWith("dark")
+      ? t("themeLight") : t("themeDark");
+  document.title = `${t("appTitle")} — ${DEVICE}`;
+  $("app-title").textContent = t("appTitle");
+
+  renderHowTo();
+  renderTeaching();
+  renderProvenance();
+}
+
 // ------------------------------------------------------------------- status
 
 const FLAG_STATUS = { "FALL?": "danger", "person-active": "success", "quiet": "neutral" };
 
 function renderStatus(ev) {
   const f = ev.feats;
-  $("flag-text").textContent = ev.flag ?? "—";
+  // The flag arrives as DATA (`person-active`), English on the wire by design --
+  // translating it there would make the relay and the dashboard disagree about
+  // what a flag means. Translate for display only.
+  $("flag-text").textContent = ev.flag ? (FLAGS[lang][ev.flag] ?? ev.flag) : "—";
   $("flag-dot").setAttribute("status", FLAG_STATUS[ev.flag] ?? "neutral");
 
   // Bars are scaled to a readable range, not to 1.0: motion_level lives around
@@ -93,17 +199,24 @@ function renderBandwidth(b) {
   // one Jetson, run Mode 1 then Mode 2, and the number appears.
   if (b.ratio) {
     $("ratio").textContent = `${Math.round(b.ratio).toLocaleString()}×`;
-    $("ratio-cap").textContent = "more data sent by Mode 1 than Mode 2";
+    $("ratio-cap").textContent = t("ratioBoth");
   } else {
     $("ratio").textContent = "—";
-    $("ratio-cap").textContent = b.mode1_total
-      ? "now switch to Mode 2 to see the ratio"
-      : "run both modes to see the ratio";
+    $("ratio-cap").textContent = b.mode1_total ? t("ratioSwitch") : t("ratioNone");
+  }
+
+  // The setup camera's own row (SPEC-08 §B3). Dim until it has ever sent, so it
+  // does not imply pixels are flowing when they are not -- and NOT folded into
+  // Mode 3's numbers above, which is what keeps Mode 3's figure quotable.
+  $("prev-rate").textContent = rate(b.preview_bps);
+  $("prev-total").textContent = b.preview_total ? bytes(b.preview_total) : "—";
+  for (const el of ["prev-name", "prev-rate", "prev-total"]) {
+    $(el).classList.toggle("muted", !b.preview_total);
   }
 
   latestMode = b.live_mode;
   const badge = $("live-mode");
-  badge.textContent = b.live_mode ? `▶ Mode ${b.live_mode} live` : "no data";
+  badge.textContent = b.live_mode ? t("modeLive")(b.live_mode) : t("noData");
   badge.setAttribute("status", b.live_mode ? "success" : "neutral");
 }
 
@@ -165,16 +278,14 @@ function drawSkeleton(p) {
 // --------------------------------------------------------- video / privacy
 
 function renderProvenance() {
+  // ⚠️ Mode 3's line claims no pixel crossed the LAN. While the setup preview is
+  // ON that is FALSE, and leaving it up would make the dashboard lie at exactly
+  // the moment a student is watching pixels arrive. The banner takes over.
   const p = $("provenance");
-  if (latestMode === 1) p.textContent = "Mode 1 sends every pixel — the relay decodes them to find motion.";
-  else if (latestMode === 2) p.textContent = "Mode 2 computed the features on the Jetson and sent ~200 bytes. Raw pixels never left the device.";
-  else if (latestMode === 3) p.textContent = "Mode 3 ran MoveNet on the Jetson. The skeleton is drawn from ~1 KB of coordinates — no pixel of you crossed the LAN.";
-  else p.textContent = "";
+  p.textContent = previewOn && latestMode === 3
+    ? "" : (PROVENANCE[lang][latestMode] ?? "");
 
-  $("why-blank").textContent =
-    latestMode === 2 ? "Mode 2 sent no image — only a feature vector"
-    : latestMode === 3 ? "Mode 3 sent no image — only a skeleton"
-    : "waiting for data…";
+  $("why-blank").textContent = WHY_BLANK[lang][latestMode] ?? t("waitingData");
 }
 
 function pollFrame() {
@@ -234,7 +345,8 @@ function logEvent(ev) {
   ul.querySelector(".empty")?.remove();
   const li = document.createElement("li");
   li.innerHTML = `<time>${clock(ev.t)}</time>` +
-    `<span class="${ev.flag === "FALL?" ? "fall" : ""}">${ev.flag}</span>`;
+    `<span class="${ev.flag === "FALL?" ? "fall" : ""}">` +
+    `${FLAGS[lang][ev.flag] ?? ev.flag}</span>`;
   ul.prepend(li);
   while (ul.children.length > LOG_MAX) ul.lastElementChild.remove();
 }
@@ -245,6 +357,8 @@ function onEvent(ev) {
   const f = ev.feats;
   if (f) history.push({ t: ev.t, motion: f.motion_level ?? 0, audio: f.audio_rms ?? 0 });
 
+  lastEvent = ev;
+  if (ev.bandwidth) lastBandwidth = ev.bandwidth;
   renderStatus(ev);
   renderBandwidth(ev.bandwidth);
   renderProvenance();
@@ -256,7 +370,8 @@ function connect() {
   const es = new EventSource(`/events?device=${encodeURIComponent(DEVICE)}`);
 
   es.onopen = () => {
-    $("conn").textContent = "connected";
+    connState = "connected";
+    $("conn").textContent = t(connState);
     $("conn").setAttribute("status", "success");
   };
   es.onmessage = (m) => {
@@ -266,10 +381,49 @@ function connect() {
   // like a bug and steps on the pull-the-network lesson. EventSource reconnects
   // by itself and the relay replays its ring buffer, so the chart heals.
   es.onerror = () => {
-    $("conn").textContent = "relay unreachable — retrying";
+    connState = "unreachable";
+    $("conn").textContent = t(connState);
     $("conn").setAttribute("status", "danger");
   };
 }
+
+// ------------------------------------------ the setup preview (SPEC-08 Part B)
+// The ONE way camera pixels may leave the Jetson in Mode 3. The relay holds the
+// state and the Jetson polls it, exactly like /mode and /config -- so this
+// button never talks to the board directly.
+//
+// Mode 3 ONLY. Mode 1 already streams pixels, and Mode 2's blank panel IS its
+// lesson: offering "show camera" there would be offering to break the point.
+
+function renderPreview() {
+  const btn = $("preview-btn");
+  btn.hidden = selectedMode !== 3;
+  btn.textContent = previewOn ? t("hideCamera") : t("showCamera");
+  btn.classList.toggle("on", previewOn);
+  $("preview-banner").toggleAttribute("data-open", previewOn);
+  renderProvenance();
+}
+
+async function syncPreview() {
+  try {
+    const { camera } = await (await fetch("/preview")).json();
+    previewOn = !!camera;
+  } catch { previewOn = false; }   // relay gone -> assume no pixels, the safe way
+  renderPreview();
+}
+
+$("preview-btn").addEventListener("click", async () => {
+  const next = !previewOn;
+  previewOn = next;
+  renderPreview();                 // optimistic; syncPreview corrects on failure
+  try {
+    await fetch("/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ camera: next }),
+    });
+  } catch { syncPreview(); }
+});
 
 // ------------------------------------------------------------------ chrome
 
@@ -277,7 +431,9 @@ $("reset-btn").addEventListener("click", async () => {
   await fetch(`/reset?device=${encodeURIComponent(DEVICE)}`, { method: "POST" });
   history.length = 0;
   lastFlag = null;
-  $("log").innerHTML = '<li class="empty">no events yet</li>';
+  lastBandwidth = null;      // or the ratio caption keeps describing cleared totals
+  $("log").innerHTML = `<li class="empty">${t("noEvents")}</li>`;
+  $("ratio-cap").textContent = t("ratioNone");
   renderChart();
 });
 
@@ -323,9 +479,15 @@ for (const t of TUNERS) {
 const MODE_BTNS = { 1: "mode1-btn", 2: "mode2-btn", 3: "mode3-btn" };
 
 function markMode(mode) {
+  selectedMode = mode;
   for (const [m, id] of Object.entries(MODE_BTNS)) {
     $(id).classList.toggle("active", Number(m) === mode);
   }
+  // The how-to card follows the SELECTED mode, not the live one: a student
+  // presses Mode 3 and needs the instructions now, not in two seconds when the
+  // supervisor has finished swapping clients.
+  renderHowTo();
+  renderPreview();
 }
 
 async function syncMode() {
@@ -345,6 +507,11 @@ for (const [m, id] of Object.entries(MODE_BTNS)) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode }),
       });
+      // The relay clears the preview on every mode change (SPEC-08 §B4 -- the
+      // toggle is not sticky). Mirror that here rather than waiting for the next
+      // poll, or the button would claim pixels are flowing when they stopped.
+      previewOn = false;
+      renderPreview();
     } catch { syncMode(); }
   });
 }
@@ -355,7 +522,7 @@ const THEME_KEY = "nv-workshop-theme";
 const THEME_HOST = document.documentElement;
 function applyTheme(mode) {
   THEME_HOST.setAttribute("nve-theme", `${mode} inter`);
-  $("theme-btn").textContent = mode === "dark" ? "light" : "dark";
+  $("theme-btn").textContent = mode === "dark" ? t("themeLight") : t("themeDark");
   localStorage.setItem(THEME_KEY, mode);
 }
 $("theme-btn").addEventListener("click", () => {
@@ -366,10 +533,21 @@ applyTheme(
   (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
 );
 
-document.title = `Edge Sensing — ${DEVICE}`;
+$("lang-btn").addEventListener("click", () => applyLang(lang === "zh" ? "en" : "zh"));
+
+// Delegated once, before the first render: renderCompare() replaces that subtree
+// on every language switch, so per-button listeners would leak or be lost.
+wireCompare();
+
+// applyLang paints every label, so it must run AFTER applyTheme (whose button
+// text it sets) and BEFORE anything renders.
+applyLang(lang);
+
 loadTuning();
 syncMode();
+syncPreview();
 setInterval(syncMode, 3000);   // reflect switches made from another browser
+setInterval(syncPreview, 3000);
 connect();
 setInterval(pollFrame, FRAME_MS);
 setInterval(renderChart, 1000);   // keep the window scrolling even when idle

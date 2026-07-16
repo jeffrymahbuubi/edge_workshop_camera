@@ -64,5 +64,27 @@ FALL_HOLD_S = float(os.environ.get("FALL_HOLD_S", "3"))
 # fall and every demo boots into a false alarm.
 UPRIGHT_LOOKBACK_S = float(os.environ.get("UPRIGHT_LOOKBACK_S", "10"))
 
+# --- mode 3: multi-modal fusion (SPEC-08 Part A) ---
+# Sound CORROBORATES the fall rule; it never gates it. Two senses agreeing buy
+# SPEED, not permission.
+#
+# The rejected design was `lying AND loud`. It reads as the obvious one and it is
+# a SAFETY REGRESSION: a person who slumps silently -- faints, slides off a chair
+# onto carpet -- makes no thump, and vision alone catches them today. It would
+# also couple Mode 3 to the microphone, which is this project's most likely
+# per-board failure and one that fails SILENTLY (SPEC-01 §6 step 3).
+#
+# The hold once a thump has corroborated the drop. UNLIKE FALL_HOLD_S=3, this
+# number is a GUESS -- it has no hardware behind it yet (SPEC-08 §D). Too low and
+# a thump plus a stumble fires; the corroboration window below is what keeps it
+# honest.
+FALL_HOLD_FAST_S = float(os.environ.get("FALL_HOLD_FAST_S", "1"))
+# How close to the upright->lying transition a thump must land to count as part
+# of THE DROP. Not "any loud sound, ever": someone lying in bed for ten minutes
+# who then coughs must never be upgraded to a fall. Two-sided, because the impact
+# and the first `lying` label usually share a 1s tick and which one wins that tick
+# is a race.
+LOUD_CORROBORATION_S = float(os.environ.get("LOUD_CORROBORATION_S", "2"))
+
 # --- cadence: both modes wake up once per second ---
 SECONDS_PER_TICK = 1.0

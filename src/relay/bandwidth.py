@@ -15,6 +15,22 @@ import time
 
 MODES = ("mode1", "mode2", "mode3")
 
+# The Mode 3 setup preview (SPEC-08 Part B) -- pixels a student opted into so they
+# can frame themselves. Its own bucket, and DELIBERATELY NOT IN `MODES`:
+#
+#   * Mode 3's ~562 B is the number the whole workshop quotes. Folding setup
+#     pixels into it would make Mode 3 appear to cost ~583 KB/s and the mode's
+#     argument would evaporate -- silently, because the dashboard would simply
+#     show a bigger number.
+#   * The ratio is mode1/mode2. Setup pixels are neither.
+#   * live_mode() below does int(name[-1]). "preview"[-1] is "w" -> ValueError.
+#     Membership in MODES is load-bearing in a way the name does not advertise.
+#
+# It is tracked rather than ignored on purpose: showing 562 B/s against 583 KB/s
+# side by side IS the lesson (SPEC-08 §B3).
+PREVIEW = "preview"
+TRACKED = MODES + (PREVIEW,)
+
 # Smoothing for the live bytes/sec readout. A raw per-second delta is too jumpy
 # to read; this is a compromise between responsive and legible.
 EWMA_ALPHA = 0.3
@@ -32,12 +48,12 @@ class BandwidthTracker:
 
     def _dev(self, device):
         if device not in self._d:
-            self._d[device] = {m: _blank() for m in MODES}
+            self._d[device] = {m: _blank() for m in TRACKED}
         return self._d[device]
 
     def record(self, device, mode, nbytes):
         """Called once per ingest. `nbytes` is Content-Length; None is ignored."""
-        if mode not in MODES or not nbytes:
+        if mode not in TRACKED or not nbytes:
             return
         s = self._dev(device)[mode]
         now = time.time()
@@ -53,7 +69,12 @@ class BandwidthTracker:
         s["last_seen"] = now
 
     def live_mode(self, device):
-        """Which mode sent most recently -- 1, 2, 3, or None."""
+        """Which mode sent most recently -- 1, 2, 3, or None.
+
+        Iterates MODES, never TRACKED: a setup preview frame must not flip the
+        badge (the relay is in Mode 3 and stays there), and int("preview"[-1])
+        would raise anyway.
+        """
         s = self._dev(device)
         seen = [(s[m]["last_seen"], m) for m in MODES if s[m]["last_seen"]]
         return int(max(seen)[1][-1]) if seen else None
@@ -79,6 +100,12 @@ class BandwidthTracker:
             "mode3_last_seen": s["mode3"]["last_seen"],
             "ratio": round(ratio, 1) if ratio else None,
             "live_mode": self.live_mode(device),
+            # Setup pixels (SPEC-08 §B3). Reported SEPARATELY and never folded
+            # into mode3_total or the ratio: the point is that a student can see
+            # 562 B/s and ~583 KB/s at the same time, move the number themselves,
+            # and watch it collapse back when they turn the camera off.
+            "preview_total": s[PREVIEW]["total_bytes"],
+            "preview_bps": round(s[PREVIEW]["ewma_bps"], 1),
         }
 
     def reset(self, device=None):

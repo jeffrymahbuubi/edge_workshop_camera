@@ -177,22 +177,32 @@ The **API key never leaves the laptop.** Devices carry a revocable token only.
 ```
 → `{"device": "bench01", "flag": "person-active", "note": null}`
 
-**Mode 3 → `/ingest_posture`** *(SPEC-04 — rewritten for MoveNet 2026-07-16)*
+**Mode 3 → `/ingest_posture`** *(SPEC-04 — MoveNet 2026-07-16; audio added by SPEC-08)*
 ```jsonc
 { "posture": "lying",           // standing | walking | sitting | lying | absent
   "abnormal": true,
-  "reason": "upright→lying held 3s",   // counts up ("lying 1/3s") while building
+  "reason": "thump + upright→lying held 1s",  // counts up ("lying 1/3s") while building;
+                                              // "thump + " prefix = sound corroborated
   "keypoints": [[0.51, 0.42, 0.9], /* …17 total… */],  // [x,y,score] 0..1, COCO order
   "bbox": [0.14, 0.68, 0.82, 0.18],    // [x,y,w,h] normalised 0..1; null if no person
   "score": 0.88,                       // mean confidence of trusted joints; null if none
+  "audio_rms": 0.174,                  // SPEC-08 §A5 — a SCALAR, never samples
+  "loud_flag": true,                   // SPEC-08 §A5 — did a thump land this second?
   "backend": "movenet",
   "context": "" }
 ```
-→ `{"device": "bench01", "flag": "FALL?", "note": null}`
+→ `{"device": "bench01", "flag": "FALL?", "note": null, "config": {…live thresholds…}}`
 
-**Measured on hardware: 562 B.** Mode 1 is ~583,000 B — Mode 3 is **~1,037× smaller and
-carries a skeleton.** Keypoints are rounded to 3 dp on the wire (0.3 px on a 320 px frame,
-2.2× smaller than full-precision floats — see SPEC-04 §4.1).
+**Measured: 562 B on hardware before SPEC-08; 611 B with the audio scalars** (measured on
+the laptop from the real `_payload`, 2026-07-16 — the two fields cost **49 B**). Mode 1 is
+~583,000 B, so Mode 3 is **~955× smaller and carries a skeleton.** Keypoints are rounded to
+3 dp on the wire (0.3 px on a 320 px frame, 2.2× smaller than full-precision floats —
+SPEC-04 §4.1).
+
+> ⚠️ **`config` now rides the Mode 3 response too** (SPEC-08 §A7). Mode 3 reads the mic as
+> of SPEC-08, so the dashboard's `loud_rms_thresh` must reach it or SPEC-06's slider
+> silently lies in one of the three modes. Same channel Mode 2 uses — no second poll. The
+> **fusion stays on the Jetson**; the relay only supplies the number.
 
 > ⚠️ **Keypoints DO travel — this reverses the original rule**, deliberately (Jeffry,
 > 2026-07-16). The old contract said "only the verdict, never keypoints", reasoning that a
@@ -200,13 +210,27 @@ carries a skeleton.** Keypoints are rounded to 3 dp on the wire (0.3 px on a 320
 > ~583 KB of recognisable **faces**; this is 17 numbers that identify nobody, and it buys
 > the live stick figure that proves the ML ran on the edge.
 >
-> **The line that still holds absolutely: RAW PIXELS NEVER TRAVEL.** No frames, no audio,
-> no JPEG — note the deliberate absence of an `image` field. Pinned by
+> **The line that still holds absolutely: RAW PIXELS NEVER TRAVEL.** No frames, no JPEG,
+> no audio *buffer* — note the deliberate absence of an `image` field. Pinned by
 > `tests/test_mode3_payload.py::test_raw_pixels_never_travel`.
 >
-> **Mode 3 carries no Mode 2 fields either** — no `motion_level`, no `audio_rms`, no
-> `fall_suspected`. It is keypoints only (SPEC-04 §3.1); the two modes answer different
-> questions and blurring them into one payload would re-couple them.
+> ⚠️ **SPEC-08 moved this line a second time — 2026-07-16. Read SPEC-08 before trusting
+> any "Mode 3 is keypoints only" statement elsewhere in the specs.**
+>
+> 1. **Sound is fused in** (SPEC-08 Part A). `audio_rms` + `loud_flag` now travel — two
+>    scalars, ~20 B, exactly Mode 2's long-standing argument that an RMS is not a
+>    recording. The mic's **samples** still never leave. The workshop's theme is
+>    *Multi-Modal* Posture Recognition and Mode 3 was the only uni-modal mode.
+> 2. **Pixels may travel from Mode 3 — but ONLY via `/ingest_preview`** (SPEC-08 Part B):
+>    a separate endpoint, a separate payload, a separate byte bucket, default OFF and
+>    non-sticky. **`/ingest_posture`'s contract above stays absolute** — no pixel may ever
+>    enter it. The separation is the design: the preview is deliberately a *different
+>    thing*, not a field someone can quietly add here.
+>
+> **Mode 3 still carries no Mode 2 VIDEO fields** — no `motion_level`, no `n_blobs`, no
+> `motion_flag`, no `fall_suspected`. That last one matters most: it is *Mode 2's verdict*,
+> and two fall verdicts in one payload is ambiguity, not multi-modality — the relay would
+> not know which one raises the alarm.
 
 ### 4.4 The six-field feature vector
 

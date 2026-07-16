@@ -277,6 +277,109 @@ cd src && uv run --with fastapi --with "uvicorn[standard]" --with opencv-python 
 - [x] Reset button clears totals, chart and log.
       *(`m1`/`ratio` → `—`, log 20→4, chart cleared.)*
 
+---
+
+## 9. Teaching content + i18n (built 2026-07-16)
+
+**Why:** *"It is currently ambiguous how to reach FALL"* — students could not experiment
+on their own, and Jeffry's boss needs the project's point **from the dashboard alone**,
+without reading code. Layout chosen by Jeffry from three options: **hybrid**.
+
+| | For whom | Where |
+|---|---|---|
+| **How to trigger FALL** card | the student, mid-experiment | inline, follows the **selected** mode |
+| **3-mode comparison** + *About the sound* | instructor / management | full width, **below** the live panel |
+
+### 9.0 The comparison is SYNCHRONISED ROWS, not cards (revised 2026-07-16)
+
+First build used three tall cards. Jeffry: *"add toggle button therefore it look
+tidier"*. Rebuilt as **collapsible rows that span all three modes at once** — click
+`WHAT IT DOES` and Mode 1/2/3's answers open together, side by side.
+
+- [x] **One shared 3-column grid** for the pinned header and every row body, so columns
+      cannot drift as rows open. *(Verified live: the three cells of an opened row share
+      an identical `top` — 278px.)*
+- [x] **Rejected: per-card accordions** (the more literal reading). Each card would open
+      independently → three different heights, and **three clicks to compare one topic**.
+      The section exists to answer "how do the three differ on X?" — a per-card accordion
+      answers "what does Mode 1 say?", which the card already did.
+- [x] **Rejected: a dimension switcher** (one topic visible at a time). Tidiest, but the
+      boss could never scan or print the whole picture — and that is the section's job.
+- [x] Default open: **`senses` + `how`** — the multi-modal point, and the thing a student
+      came for. Everything else collapsed.
+- [x] Open state is **module-level, so it survives a language switch** (which re-renders
+      the whole subtree). *(Verified: opened `what`, switched to 中文, still open.)*
+- [x] Listener is **delegated** on the container — per-button listeners would leak or be
+      lost on every re-render.
+- [x] ⚠️ **Split into `src/web/compare.js`.** `app.js` had hit **494/500** lines. It is
+      also the honest boundary: static teaching content, no live data, no SSE.
+      `relay_server.py` now serves the three modules from a **whitelist** (`app`,
+      `content`, `compare`) — `/{name}.js` unchecked would have been a path-traversal
+      file read (`test_the_js_route_is_a_whitelist_not_a_file_server`).
+- [x] **Paragraph width caps removed** (were 60ch / 78ch). The classic readable measure,
+      but at this container width they wrapped after half a line next to obvious empty
+      space, which reads as broken. Jeffry's call: use the width. Lead is now 1 line, the
+      sound note 4.
+
+- [x] Copy lives in **`src/web/content.js`**, a data module — not markup. The hybrid layout
+      renders the **same** mode copy **twice**; two copies in HTML would drift on the first
+      edit. It also keeps `index.html` under CLAUDE.md's 500 lines.
+- [x] Card order is the narrative: **Status** (what it says now) → **How to trigger FALL**
+      (how to change it) → **Fall sensitivity** (how to tune it when it will not fire).
+- [x] The card follows the **SELECTED** mode, not the live one — a student pressing Mode 3
+      needs the steps immediately, not two seconds later once the supervisor has swapped.
+- [x] **EN ⇄ 繁體中文 toggle**, default **English** (Jeffry's call), persisted like the theme.
+      Whole dashboard, not just the new copy. Flag words stay **English on the wire** and are
+      translated for display only — translating them in the relay would make the two ends
+      disagree about what a flag means (SPEC-01 §4).
+- [x] ⚠️ **Inter ships NO CJK glyphs and the LAN has no internet** → 中文 would have been
+      tofu boxes. Fixed with a system-font fallback (JhengHei / PingFang TC / Noto Sans TC);
+      a CJK webfont would be several MB. Verified in-browser: renders correctly.
+- [x] ⚠️ **Language can switch before any data arrives.** Strings painted only by a data
+      path (`waiting…`, `connected`, `no data`, the ratio caption) were stranded in English
+      until the next event — **forever on an idle dashboard**. `applyLang()` now repaints
+      from remembered state (`lastEvent` / `lastBandwidth` / `connState`). **Found by
+      looking at the rendered page**, not by reading the code.
+
+### 9.1 ⚠️ The centring bug — and the fix that caused it
+
+Jeffry: *"the website content is not centered, it's left justified."* Real, and the cause
+is a trap worth keeping:
+
+```css
+themes.css:  [nve-theme] body { margin: 0 }     /* (0,1,1) */
+index.html:  body { margin-inline: auto }       /* (0,0,1) -- LOSES */
+```
+
+An **attribute selector scores in the class column**, which outranks *any* number of
+element selectors — so `html body` **(0,0,2)** does not help either (tried; the browser
+said no). Fix: **`html[nve-theme] body { margin-inline: auto }`** — (0,1,2), wins cleanly,
+no `!important` (which would have buried the cause).
+
+> **This bug was CAUSED BY §8's dark-theme fix.** While `nve-theme` sat on `<body>`,
+> `[nve-theme] body` matched **nothing** and centring worked by luck. Moving the attribute
+> to `<html>` — correct, and required for dark mode to render at all — silently switched
+> that rule on. **One fix, one regression, and nothing connected them.** Verified live:
+> computed `margin-left` 0px → 96px at a 1280px viewport.
+
+### 9.2 Mode 3's setup camera (SPEC-08 Part B)
+
+- [x] Toggle on the video panel — **Mode 3 only**. Mode 1 already streams pixels, and Mode
+      2's blank panel *is* its lesson: a "show camera" button there would offer to break
+      the very point the panel makes.
+- [x] Loud banner while ON + the button turns red. The panel must never quietly look like
+      Mode 1 while claiming to be Mode 3.
+- [x] Its own **`setup camera`** row in the bandwidth panel — never folded into Mode 3's,
+      so Mode 3's ~600 B stays quotable. Seeing both numbers at once is the lesson.
+- [x] Mode 3's provenance line ("no pixel of you crossed the LAN") is **suppressed** while
+      the preview is on — it would be a lie at exactly the moment pixels are arriving.
+- [x] Verified live: button hidden outside Mode 3; toggle → relay `{"camera":true}` → banner;
+      re-selecting Mode 3 **cleared it** (SPEC-08 §B4's non-sticky rule, observed working).
+- [ ] **Not yet seen with a real frame in it** — needs the Jetson.
+
+> **File sizes** (CLAUDE.md limit 500): `app.js` 485, `index.html` 400, `content.js` 372,
+> `compare.js` 85. app.js hit 494 and was split rather than appended to — see §9.0.
+
 > **Console noise.** The only console errors are the by-design `/latest.jpg` 404s — 187 in
 > one run, ~5/sec while no frame exists. No JS errors at all. The 404 *is* the privacy
 > lesson (SPEC-02 §7), but the volume will bury a real error during the workshop.

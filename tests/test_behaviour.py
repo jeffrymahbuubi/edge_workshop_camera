@@ -269,3 +269,163 @@ def test_unknown_labels_are_inert_not_crashes(bogus):
 def test_default_hold_is_three_seconds():
     """SPEC-04 §1.2: default N=3s with bgsub, to fire before the ~8s fade."""
     assert BehaviourMonitor().fall_hold_s == 3.0
+
+
+# --- multi-modal fusion (SPEC-08 Part A) --------------------------------
+#
+# Sound CORROBORATES; it never gates. Two senses agreeing buy SPEED, not
+# permission. The `lying AND loud` rule was rejected because a person who
+# slumps silently makes no thump -- gating on sound would trade a real
+# detection for a tidier workshop theme (SPEC-08 §A2).
+
+FAST = 1.0
+WINDOW = 2.0
+
+
+def fusion_monitor():
+    return BehaviourMonitor(fall_hold_s=HOLD, upright_lookback_s=LOOKBACK,
+                            fall_hold_fast_s=FAST, loud_corroboration_s=WINDOW)
+
+
+def test_thump_at_the_drop_fires_at_the_fast_hold():
+    """walk -> lying + a thump = both senses agree = fire in 1s, not 3s."""
+    m = fusion_monitor()
+    m.update("walking", now=0)
+    m.update("lying", loud=True, now=1)          # the impact
+    v = m.update("lying", now=2)                 # held 1s -> fast hold met
+    assert v["abnormal"] is True
+
+
+def test_a_thump_does_not_fire_before_even_the_fast_hold():
+    """Corroboration lowers the bar to 1s. It does not remove it -- a thump plus
+    an instant of lying is a stumble, not a confirmed fall."""
+    m = fusion_monitor()
+    m.update("walking", now=0)
+    v = m.update("lying", loud=True, now=1)      # held 0s
+    assert v["abnormal"] is False
+
+
+def test_thump_just_BEFORE_the_drop_still_counts():
+    """The window is two-sided (SPEC-08 §A3).
+
+    The impact and the first `lying` label usually land in the same 1s tick, but
+    which one wins the tick is a race -- the thump can be sampled a tick early or
+    a tick late. A one-sided window would drop real corroborations for no reason.
+    """
+    m = fusion_monitor()
+    m.update("walking", loud=True, now=0)        # thump lands while still upright
+    m.update("lying", now=1)
+    v = m.update("lying", now=2)                 # held 1s
+    assert v["abnormal"] is True
+
+
+def test_thump_outside_the_window_does_not_upgrade():
+    """A thump only counts if it belongs to THE DROP.
+
+    At t=3.5 the person has been lying 2.5s. Corroborated that would have fired
+    (>= 1s); un-corroborated it must not (< 3s). This is the assertion that keeps
+    `_last_loud_t` from meaning "any loud sound, ever".
+    """
+    m = fusion_monitor()
+    m.update("walking", now=0)
+    m.update("lying", now=1)
+    v = m.update("lying", loud=True, now=3.5)    # thump 2.5s late -- outside 2.0s
+    assert v["abnormal"] is False
+    assert m.update("lying", now=4)["abnormal"] is True      # still fires at 3s
+
+
+def test_a_cough_while_already_lying_in_bed_never_fires():
+    """THE false-positive this window exists to prevent.
+
+    Someone lying in bed has no upright behind them, so the lookback already
+    rejects it -- but a naive "loud + lying" fusion would resurrect it. Sound must
+    never manufacture a fall the vision rule rejected.
+    """
+    m = fusion_monitor()
+    v = feed(m, [("lying", 0), ("lying", 1)])
+    v = m.update("lying", loud=True, now=2)      # coughs
+    assert v["abnormal"] is False
+    assert m.update("lying", loud=True, now=60)["abnormal"] is False
+
+
+def test_corroboration_latches_across_a_quiet_second():
+    """A fall is QUIET after the impact -- that is the whole signature.
+
+    If corroboration were re-evaluated each tick from the current `loud`, the
+    silence that follows every real fall would demote it back to the 3s hold and
+    the fast path would never fire.
+    """
+    m = fusion_monitor()
+    m.update("walking", now=0)
+    m.update("lying", loud=True, now=1)          # thump
+    v = m.update("lying", loud=False, now=2)     # silence after impact
+    assert v["abnormal"] is True
+
+
+def test_reason_names_the_thump_when_corroborated():
+    """SPEC-08 §A4: the fusion is INVISIBLE otherwise.
+
+    Both senses agreeing and vision alone would print identical banners, and the
+    student would learn nothing about what fusion bought them. This string is the
+    only place fusion becomes watchable.
+    """
+    m = fusion_monitor()
+    m.update("walking", now=0)
+    m.update("lying", loud=True, now=1)
+    v = m.update("lying", now=2)
+    assert "thump" in v["reason"]
+    assert "upright" in v["reason"]
+
+
+def test_vision_only_reason_does_NOT_claim_a_thump():
+    m = fusion_monitor()
+    v = feed(m, [("walking", 0), ("lying", 1), ("lying", 4)])
+    assert v["abnormal"] is True
+    assert "thump" not in v["reason"]
+
+
+# --- the safety property (SPEC-08 §A2/§A3) ------------------------------
+#
+# THE argument for corroboration over `lying AND loud`. If these fail, the
+# change stopped being safe and became a regression.
+
+def test_a_silent_fall_still_fires_at_the_normal_hold():
+    """The person who slumps silently -- faints, slides onto carpet. THE case
+    that killed the `lying AND loud` design."""
+    m = fusion_monitor()
+    v = feed(m, [("walking", 0), ("lying", 1), ("lying", 4)])
+    assert v["abnormal"] is True
+    assert "3" in v["reason"]
+
+
+def test_a_deaf_board_behaves_EXACTLY_like_today():
+    """SPEC-08 §A2: the mic is this project's most likely per-board failure, and
+    it fails SILENTLY (PulseAudio defaults to the empty onboard jack; the
+    persisted fix embeds a webcam serial). Under `lying AND loud` a deaf board
+    could never alarm at all. Under corroboration it degrades to vision-only.
+
+    `loud` is never passed here -- exactly what a caller with a dead mic sends.
+    """
+    deaf = fusion_monitor()
+    vision_only = monitor()
+    script = [("walking", 0), ("walking", 1), ("lying", 2), ("lying", 3),
+              ("lying", 5), ("absent", 6), ("standing", 7)]
+    for posture, t in script:
+        assert deaf.update(posture, now=t) == vision_only.update(posture, now=t)
+
+
+def test_loud_defaults_to_false_so_existing_callers_are_unchanged():
+    """The whole suite above calls update() without `loud`. If that ever stopped
+    meaning "vision only", every one of those tests would silently change meaning.
+    """
+    m = fusion_monitor()
+    m.update("walking", now=0)
+    m.update("lying", now=1)
+    assert m.update("lying", now=2)["abnormal"] is False      # NOT the fast hold
+
+
+def test_defaults_come_from_config():
+    m = BehaviourMonitor()
+    assert m.fall_hold_fast_s == 1.0
+    assert m.loud_corroboration_s == 2.0
+    assert m.fall_hold_fast_s < m.fall_hold_s      # or corroboration buys nothing
