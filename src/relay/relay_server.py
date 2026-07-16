@@ -21,10 +21,12 @@ import json
 import os
 import time
 from collections import defaultdict, deque
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
@@ -33,6 +35,11 @@ from common.features import extract_features
 from relay.bandwidth import BandwidthTracker
 
 app = FastAPI(title="Camera Workshop Relay")
+
+# The dashboard is served by the LAPTOP, never the Jetson (Role A). Assets are
+# vendored locally -- the workshop LAN has no internet.
+WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+app.mount("/vendor", StaticFiles(directory=WEB_DIR / "vendor"), name="vendor")
 
 DEVICE_TOKENS = {
     "tok_demo_bench01": {"device": "bench01", "active": True},
@@ -155,6 +162,18 @@ class PosturePayload(BaseModel):
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/")
+def dashboard():
+    return FileResponse(WEB_DIR / "index.html", media_type="text/html",
+                        headers={"Cache-Control": "no-store"})
+
+
+@app.get("/app.js")
+def dashboard_js():
+    return FileResponse(WEB_DIR / "app.js", media_type="application/javascript",
+                        headers={"Cache-Control": "no-store"})
 
 
 @app.post("/ingest_raw")

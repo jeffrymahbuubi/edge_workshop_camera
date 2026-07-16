@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Edge Sensing — Live Dashboard</title>
+
+  <!-- Every asset is LOCAL. The workshop LAN is a cable between two machines
+       with no internet: one <link> to a CDN and this page hangs forever. -->
+  <link rel="stylesheet" href="/vendor/elements/styles.css">
+  <link rel="stylesheet" href="/vendor/elements/themes.css">
+  <link rel="stylesheet" href="/vendor/elements/fonts/inter.css">
+  <script type="module" src="/vendor/elements/core.js"></script>
+
+  <style>
+    :root {
+      --gap: .75rem;
+      --panel-bg: rgba(128, 128, 128, .06);
+      --panel-line: rgba(128, 128, 128, .25);
+      --motion: #76b900;            /* NVIDIA green */
+      --audio: #4aa8ff;
+      --danger: #ff5252;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: var(--gap);
+      max-width: 68rem; margin-inline: auto;
+      font-family: Inter, system-ui, sans-serif;
+    }
+    header { display: flex; align-items: center; gap: var(--gap); margin-block-end: var(--gap); }
+    header h1 { margin: 0; font-size: 1.05rem; font-weight: 600; flex: 1; }
+
+    .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--gap); align-items: start; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+
+    .panel {
+      border: 1px solid var(--panel-line); border-radius: .5rem;
+      background: var(--panel-bg); padding: var(--gap);
+    }
+    .panel h2 {
+      margin: 0 0 .6rem; font-size: .7rem; font-weight: 700;
+      letter-spacing: .09em; text-transform: uppercase; opacity: .55;
+    }
+
+    /* --- status --- */
+    .flag { display: flex; align-items: center; gap: .5rem; margin-block-end: .8rem; }
+    .flag-text { font-size: 1.45rem; font-weight: 650; }
+    .meter { display: grid; grid-template-columns: 3.4rem 1fr 3.2rem; gap: .5rem; align-items: center; margin-block: .3rem; }
+    .meter .lbl { font-size: .75rem; opacity: .6; }
+    .meter .val { font-size: .75rem; font-variant-numeric: tabular-nums; text-align: right; opacity: .8; }
+    .bar { height: .5rem; border-radius: .25rem; background: rgba(128,128,128,.2); overflow: hidden; }
+    .bar > i { display: block; height: 100%; width: 0; transition: width .2s ease; }
+    .bar.motion > i { background: var(--motion); }
+    .bar.audio  > i { background: var(--audio); }
+    .facts { display: flex; gap: 1.1rem; margin-block-start: .7rem; font-size: .78rem; opacity: .75; }
+    .facts b { font-variant-numeric: tabular-nums; }
+
+    /* --- video / privacy --- */
+    .video-wrap {
+      position: relative; aspect-ratio: 4/3; border-radius: .375rem; overflow: hidden;
+      background: rgba(128,128,128,.12);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .video-wrap img { width: 100%; height: 100%; object-fit: cover; display: none; }
+    .video-wrap.has-frame img { display: block; }
+    .placeholder { text-align: center; padding: 1rem; }
+    .video-wrap.has-frame .placeholder { display: none; }
+    .placeholder .glyph { font-size: 2rem; opacity: .35; line-height: 1; }
+    .placeholder .msg { margin-block-start: .5rem; font-size: .82rem; font-weight: 600; }
+    .placeholder .why { margin-block-start: .25rem; font-size: .72rem; opacity: .6; max-width: 22ch; margin-inline: auto; }
+    .provenance { margin-block-start: .5rem; font-size: .72rem; opacity: .7; min-height: 2.4em; }
+
+    /* --- the lesson --- */
+    .modes { display: grid; grid-template-columns: auto 1fr auto; gap: .35rem .7rem; align-items: baseline; }
+    .modes .name { font-weight: 600; font-size: .85rem; }
+    .modes .rate, .modes .total { font-variant-numeric: tabular-nums; font-size: .85rem; text-align: right; }
+    .modes .muted { opacity: .5; }
+    .ratio {
+      margin-block-start: .8rem; padding-block-start: .7rem;
+      border-block-start: 1px solid var(--panel-line); text-align: center;
+    }
+    .ratio .num { font-size: 2.1rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--motion); }
+    .ratio .cap { font-size: .72rem; opacity: .6; }
+
+    /* --- chart --- */
+    .chart { width: 100%; height: 78px; display: block; }
+    .chart-legend { display: flex; gap: .9rem; font-size: .7rem; opacity: .65; margin-block-start: .3rem; }
+    .swatch { display: inline-block; width: .6rem; height: .6rem; border-radius: .15rem; margin-inline-end: .3rem; }
+    .axis { display: flex; justify-content: space-between; font-size: .65rem; opacity: .45; }
+
+    /* --- events --- */
+    .log { list-style: none; margin: 0; padding: 0; max-height: 8.5rem; overflow-y: auto; font-size: .78rem; }
+    .log li { display: flex; gap: .6rem; padding-block: .2rem; border-block-end: 1px solid var(--panel-line); }
+    .log time { opacity: .5; font-variant-numeric: tabular-nums; }
+    .log .fall { color: var(--danger); font-weight: 650; }
+    .log .empty { opacity: .45; }
+
+    .stack > * + * { margin-block-start: var(--gap); }
+  </style>
+</head>
+<body nve-theme="dark inter">
+
+  <header>
+    <h1>Edge Sensing — Live</h1>
+    <nve-badge id="conn" status="neutral">connecting…</nve-badge>
+    <nve-badge id="live-mode" status="neutral">no data</nve-badge>
+    <nve-button id="theme-btn" size="sm">light</nve-button>
+    <nve-button id="reset-btn" size="sm">reset totals</nve-button>
+  </header>
+
+  <nve-alert id="fall-alert" status="danger">
+    <span id="fall-text">Fall suspected</span>
+  </nve-alert>
+
+  <div class="grid">
+    <!-- ================= left ================= -->
+    <div class="stack">
+      <section class="panel">
+        <h2>Status</h2>
+        <div class="flag">
+          <nve-dot id="flag-dot" status="neutral"></nve-dot>
+          <span class="flag-text" id="flag-text">waiting…</span>
+        </div>
+
+        <div class="meter">
+          <span class="lbl">motion</span>
+          <span class="bar motion"><i id="motion-bar"></i></span>
+          <span class="val" id="motion-val">—</span>
+        </div>
+        <div class="meter">
+          <span class="lbl">audio</span>
+          <span class="bar audio"><i id="audio-bar"></i></span>
+          <span class="val" id="audio-val">—</span>
+        </div>
+
+        <div class="facts">
+          <span>blobs <b id="blobs">—</b></span>
+          <span>fall <b id="fall">—</b></span>
+          <span>posture <b id="posture">—</b></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Last 60 seconds</h2>
+        <svg class="chart" id="chart" preserveAspectRatio="none" aria-label="motion and audio, last 60 seconds"></svg>
+        <div class="axis"><span>60s ago</span><span>now</span></div>
+        <div class="chart-legend">
+          <span><i class="swatch" style="background:var(--motion)"></i>motion</span>
+          <span><i class="swatch" style="background:var(--audio)"></i>audio</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Events</h2>
+        <ul class="log" id="log"><li class="empty">no events yet</li></ul>
+      </section>
+    </div>
+
+    <!-- ================= right ================= -->
+    <div class="stack">
+      <section class="panel">
+        <h2>What the relay can see</h2>
+        <div class="video-wrap" id="video-wrap">
+          <img id="frame" alt="Live frame received by the relay">
+          <div class="placeholder">
+            <div class="glyph">⊘</div>
+            <div class="msg">no image</div>
+            <div class="why" id="why-blank">waiting for data…</div>
+          </div>
+        </div>
+        <p class="provenance" id="provenance"></p>
+      </section>
+
+      <section class="panel">
+        <h2>The lesson — bandwidth</h2>
+        <div class="modes">
+          <span class="name">Mode 1</span>
+          <span class="rate" id="m1-rate">—</span>
+          <span class="total" id="m1-total">—</span>
+
+          <span class="name">Mode 2</span>
+          <span class="rate" id="m2-rate">—</span>
+          <span class="total" id="m2-total">—</span>
+
+          <span class="name muted" id="m3-name">Mode 3</span>
+          <span class="rate muted" id="m3-rate">—</span>
+          <span class="total muted" id="m3-total">—</span>
+        </div>
+        <div class="ratio">
+          <div class="num" id="ratio">—</div>
+          <div class="cap" id="ratio-cap">run both modes to see the ratio</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

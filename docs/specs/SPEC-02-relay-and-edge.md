@@ -257,15 +257,19 @@ Jetson `jetson-2gNANO` → laptop relay at `192.168.137.1:8000`, real USB webcam
 Mode 1's payload roughly doubles while Mode 2's stays fixed. The gap gets **~3.5× wider**
 on real hardware.
 
-This is *good news for the lesson* but it **contradicts the handout's headline number**.
-Decide before the workshop:
+This is *good news for the lesson*, and it differs from the handout's headline number.
 
-- [ ] Reconcile: does the handout say ~689× (synthetic, reproducible via `compare.py`)
-      while the dashboard shows the live figure? Two different numbers on screen and on
-      paper **will** get asked about.
-- [ ] Suggested framing: 689× is the *reproducible baseline* anyone can rerun offline;
-      the live number is *your room, your camera* — and it is **even worse than the
-      handout promised.** That is a stronger story than hiding the discrepancy.
+- [x] **Ruled by Jeffry 2026-07-16: not a problem.** The handout's 689× is **an
+      unvalidated figure** — it was never measured on hardware. The live number is the
+      measured one. No reconciliation needed; the dashboard shows the truth.
+- [x] `compare.py`'s 689× remains meaningful as the **deterministic, reproducible
+      synthetic baseline** anyone can rerun offline with no camera. Keep it as the
+      regression check it already is — it is what proved the `src/` restructure preserved
+      the boss's behaviour exactly.
+
+> Both numbers are honest and they measure different things: 689× is *the synthetic
+> scene*, ~2,395× is *your room, your camera*. The live one is simply worse for Mode 1,
+> which strengthens the lesson rather than undermining it.
 
 ### 9.3 ✅ RESOLVED — PulseAudio's default source was the empty onboard jack
 

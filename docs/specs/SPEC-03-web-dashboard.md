@@ -6,10 +6,14 @@
 
 | | |
 |---|---|
-| **Status** | 🟡 Specified, not built |
+| **Status** | 🟢 **Built** (2026-07-16) — data path validated against the real Jetson. ⚠️ **Visual rendering not yet verified in a browser** (§7). |
 | **Priority** | 🔴 **TOP** (with SPEC-02) |
 | **Runs on** | The **student laptop**, served by `relay_server.py`. Never the Jetson. |
-| **Depends on** | SPEC-02 (`/events`, `/latest.jpg`, `/reset`) |
+| **Depends on** | SPEC-02 (`/events`, `/latest.jpg`, `/reset`) — ✅ all built |
+
+**Built:** `src/web/index.html` + `src/web/app.js`, served by the relay at `GET /`
+(`/app.js`, and `/vendor/*` mounted via `StaticFiles`). Open
+**`http://<laptop-ip>:8000/`** — add `?device=bench02` to watch the other bench.
 
 **Build order matters.** Per `docs/01-design/06` § *Build & test sequence*: get the
 terminal back-end solid first, dashboard second. Do not start here until SPEC-02 §9
@@ -149,22 +153,69 @@ MODE 2     126 KB       ▶ now
 
 ## 7. Validation
 
-- [ ] Loopback with `SENSOR=synthetic` Mode 1: status updates each second, video panel
-      shows the synthetic block, byte totals climb.
-- [ ] Switch to Mode 2: **video panel blanks**, ratio appears, motion still tracks.
+### Done — 2026-07-16
+
+- [x] **All 7 assets serve 200** with correct content types: `/`, `/app.js`, `core.js`,
+      `styles.css`, `themes.css`, `fonts/inter.css`, `inter.woff2` ✅
+- [x] **Zero external references** in `index.html` / `app.js`, and no `fetch(http…)` or
+      `import(http…)` inside the vendored Elements bundle ✅
+- [x] **`app.js` parses** (`node --check`); all relay Python parses ✅
+- [x] **All 30 element IDs cross-check** — every `$("…")` in `app.js` exists in
+      `index.html`, none missing, none orphaned. *(This is the failure that would
+      otherwise be silent: a typo'd id returns `null` and that panel just never updates.)* ✅
+- [x] **All 4 Elements components** used (`nve-alert`, `nve-badge`, `nve-button`,
+      `nve-dot`) are registered in `core.js` ✅
+- [x] **Driven with real Jetson data** — Mode 1 → Mode 2, real C270 webcam, over the LAN.
+      The exact feed the browser receives: `flag: person-active`, `live_mode: 2`,
+      `mode1_total: 879,984 B`, `mode2_total: 374 B`,
+      **`ratio: 2352.9` → renders as `2,353×`**, `posture: null` (guarded) ✅
+- [x] **`/latest.jpg` → 404 after switching to Mode 2** — the privacy panel blanks ✅
+
+### ⚠️ Outstanding — needs a human at the browser
+
+**None of this is verified.** The data path is proven; the *rendering* is not. No
+screenshot tooling was available, so these are honest unknowns, not assumed passes:
+
+- [ ] **Open `http://localhost:8000/` and confirm it renders at all** — layout, Elements
+      components upgrading, fonts loading.
+- [ ] Video panel shows the frame in Mode 1 and **blanks** in Mode 2.
 - [ ] Refresh mid-demo → chart repopulates from the ring buffer (not blank).
 - [ ] Open a **second browser** → both update. (Catches the SSE fan-out bug, SPEC-02 §5.)
-- [ ] Pull the cable in Mode 1 → gap in the chart, connection indicator reacts.
+- [ ] Pull the cable in Mode 1 → gap in the chart, connection badge turns red.
 - [ ] Pull the cable in Mode 2 → gap, then **backfill** on reconnect.
-- [ ] **Airplane mode / unplug the internet** → dashboard fully functional. Any external
-      asset shows up here.
-- [ ] Check both light and dark themes (Elements ships `themes.css`).
+- [ ] **Unplug the internet** → dashboard fully functional. Static analysis says yes;
+      only a real load proves it.
+- [ ] Both **light and dark** themes — toggle in the header, persisted to `localStorage`.
 
 ---
 
-## 8. Open
+## 8. Implementation notes
 
-- [ ] Ratio panel: per-device rows, or the active device only? (SPEC-02 §10)
-- [ ] Show the caregiver `note` field? Currently always `null` — the LLM is deferred to
-      last priority, so the field exists but nothing fills it. Render only when non-null.
-- [ ] Posture panel layout — deferred to SPEC-04.
+Decisions taken while building, worth knowing before you change something:
+
+- **The chart is hand-rolled SVG, not `nve-sparkline`.** Elements ships a sparkline and
+  it was tempting, but it takes a plain `data` array — it cannot express a **time axis**
+  or a **gap**, and both are load-bearing. Points plot against the event's own `t`, and a
+  silence longer than `GAP_S` (2.5 s) **breaks the path** rather than interpolating over
+  it. Without that, Mode 2's backfill draws as a smooth line and the resilience lesson
+  evaporates. Elements still does all the chrome.
+- **Bars scale to a readable range, not to 1.0.** Measured on hardware, `motion_level`
+  lives around 0.0–0.3 and `audio_rms` around 0.0–0.15 (SPEC-02 §9), so a 0..1 bar would
+  sit visibly dead. Scaled to 0.3 / 0.15.
+- **Video uses a detached probe `Image()`.** Swapping `src` on the live element flickers
+  it to broken on every 404; loading into a probe and committing only on success keeps
+  the blank state clean and deliberate.
+- **Mode 3's row is dimmed until it ever sends**, so the panel doesn't imply a mode that
+  isn't built.
+- **The event log records transitions, not seconds** — logging every second buries the fall.
+
+---
+
+## 9. Open
+
+- [ ] Ratio panel shows the **active device only**; `?device=bench02` selects the other.
+      Per-device rows deferred until a second bench exists. (SPEC-02 §10)
+- [ ] The caregiver `note` field is **not rendered** — always `null` while the LLM is
+      deferred to last priority. Add when the interpreter lands.
+- [ ] Posture is a single line (`posture` + `torso_angle`). SPEC-04 may want the
+      timeline + alarm-banner treatment.
