@@ -162,7 +162,21 @@ MODE 2     126 KB       ▶ now
 - [ ] Show a connection indicator. When the student pulls the cable, the dashboard should
       *say* it lost the relay rather than silently freezing — the freeze looks like a bug
       and steps on the lesson.
-- [ ] Guard every optional field (`posture` is `null` until SPEC-04).
+- [x] Guard every optional field (`posture` is `null` outside Mode 3).
+- [x] ✅ **The two open rendering bugs are FIXED 2026-07-16** — both were invisible in
+      source and only a real browser showed them:
+      - **The alarm banner cried wolf on load and then never closed.** Root cause: the
+        vendored `nve-alert` **does not observe an `open` attribute**, so
+        `removeAttribute("open")` was silently a no-op — the banner was stuck up forever,
+        which made a *real* `FALL?` indistinguishable from the stuck one. Now driven by our
+        own `data-open` + `#fall-alert { display: none }`, independent of the component's
+        API. Verified: clean load → fires on a fall → **clears**.
+      - **Dark theme rendered dark-on-dark.** `nve-theme` was on `<body>`, but themes.css
+        declares `--nve-sys-layer-canvas-color: var(--nve-sys-text-color)` at `:root`/`html`
+        where the attribute was absent — and custom properties resolve **at the element
+        that declares them**, so it locked in light's 20% text while `background` flipped
+        correctly. Moved to `<html>` (themes.css's own selector list allows it). Verified
+        legible.
 
 ---
 

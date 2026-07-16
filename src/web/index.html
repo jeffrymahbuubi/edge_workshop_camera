@@ -1,5 +1,12 @@
 <!doctype html>
-<html lang="en">
+<!-- nve-theme lives on <html>, NOT <body>. themes.css declares
+     --nve-sys-layer-canvas-color: var(--nve-sys-text-color) at :root/html, where
+     nve-theme was absent. Custom properties resolve AT THE ELEMENT THAT DECLARES
+     THEM, so it locked in light's 20% text and body inherited that already-resolved
+     value -- while `background` flipped correctly (declared inside the theme block).
+     Result: dark text on a dark background. themes.css's own selector list is
+     `[nve-theme~=root],body[nve-theme],html[nve-theme]` -- html is supported. -->
+<html lang="en" nve-theme="dark inter">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -125,9 +132,20 @@
     .log .empty { opacity: .45; }
 
     .stack > * + * { margin-block-start: var(--gap); }
+
+    /* --- the alarm banner --- */
+    /* HIDDEN until a fall actually fires. Two reasons this matters more than it
+       looks: a fresh dashboard was crying "Fall suspected" on page load before the
+       Jetson had ever connected, and — worse — the banner never closed again, so a
+       REAL FALL? was indistinguishable from the stuck one.
+       Driven by our own data-open, NOT nve-alert's API: the component does not
+       observe an `open` attribute, so app.js's removeAttribute("open") was silently
+       doing nothing. An ID selector here beats the component's :host display. */
+    #fall-alert { display: none; }
+    #fall-alert[data-open] { display: block; }
   </style>
 </head>
-<body nve-theme="dark inter">
+<body>
 
   <header>
     <h1>Edge Sensing — Live</h1>

@@ -59,13 +59,17 @@ function renderStatus(ev) {
     : "—";
   drawSkeleton(p);
 
+  // Modes 1/2 raise `fall_suspected` (loud sound + motion stopped); Mode 3 raises
+  // `abnormal` (upright → lying held). Different questions, same banner.
   const fall = f?.fall_suspected || p?.abnormal;
   const alert = $("fall-alert");
   if (fall) {
     $("fall-text").textContent = p?.reason || "Fall suspected — loud sound, then motion stopped";
-    alert.setAttribute("open", "");
+    alert.setAttribute("data-open", "");
   } else {
-    alert.removeAttribute("open");
+    // `data-open`, not `open`: nve-alert does not observe `open`, so this branch
+    // used to be a no-op and the banner stayed up forever. See index.html.
+    alert.removeAttribute("data-open");
   }
 }
 
@@ -346,13 +350,16 @@ for (const [m, id] of Object.entries(MODE_BTNS)) {
 }
 
 const THEME_KEY = "nv-workshop-theme";
+// <html>, not <body> — see the comment on the <html> tag in index.html. Setting it
+// on body left text dark-on-dark because the canvas colour token resolves at :root.
+const THEME_HOST = document.documentElement;
 function applyTheme(mode) {
-  document.body.setAttribute("nve-theme", `${mode} inter`);
+  THEME_HOST.setAttribute("nve-theme", `${mode} inter`);
   $("theme-btn").textContent = mode === "dark" ? "light" : "dark";
   localStorage.setItem(THEME_KEY, mode);
 }
 $("theme-btn").addEventListener("click", () => {
-  applyTheme(document.body.getAttribute("nve-theme").startsWith("dark") ? "light" : "dark");
+  applyTheme(THEME_HOST.getAttribute("nve-theme").startsWith("dark") ? "light" : "dark");
 });
 applyTheme(
   localStorage.getItem(THEME_KEY) ||
