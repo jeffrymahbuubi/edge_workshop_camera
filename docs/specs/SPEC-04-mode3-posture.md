@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Status** | 🟢 **Code built + laptop-validated (TDD, 2026-07-16)** — ⚠️ §6's bench protocol outstanding: thresholds and the fade time are still unmeasured |
+| **Status** | 🟢 **Code built + laptop-validated + RUNS ON THE JETSON (2026-07-16)** — deployed and executed on the board (3.8, real webcam → relay, wire payload correct). ⚠️ §6's *posture-threshold* protocol still outstanding: whether bgsub reports `lying` on a real person, the aspect/motion numbers, and the fade time are unmeasured (needs a body in frame). |
 | **Priority** | 🟢 Groundwork — after Modes 1+2 are solid on hardware |
 | **Runs on** | The **Jetson** (posture *and* the fall rule) |
 | **Depends on** | SPEC-01 (contract), SPEC-02 (relay) |
@@ -252,7 +252,32 @@ so tests import `edge`/`common` exactly the way the Jetson does (`python3 -m edg
 > happen for a few seconds and call it a pass — which is also exactly what a broken rule
 > looks like when the camera is pointed at a wall.
 
-### Outstanding — the bench (needs the Jetson + webcam)
+### Done on the Jetson — 2026-07-16 (import / runtime / wire path)
+
+Deployed the four files to `~/EDGE-CAMERA/` and ran on the board (`plink`, Python **3.8.0**,
+`L4T R32.7.4`). This closes the *"does it run on the target at all"* half of the gate; the
+posture-threshold half below still needs a body in frame.
+
+- [x] **Imports + rule execute on 3.8** — `behaviour.py` and `mode3_posture.py` (real
+      `cv2` 4.11 / `sensor` / `posture`) import clean; a scripted walk→lying→held returned
+      `{'abnormal': True, 'reason': 'upright→lying held 3s'}`.
+- [x] **The `→` in `reason` prints safely** — Jetson locale is `zh_TW.UTF-8`,
+      `sys.stdout.encoding` = `utf-8`, so no `UnicodeEncodeError`. (This was a real worry:
+      the client `print()`s that string every second.)
+- [x] **Live run, real C270 webcam → relay over the LAN** —
+      `RELAY_URL=http://192.168.137.1:8000 SENSOR=webcam POSTURE_BACKEND=bgsub python3 -m
+      edge.mode3_posture`. Client posted verdicts, store-and-forward summary clean (0
+      buffered), relay received `mode 3` / posture payload / `mode3_total: 130 B`. The wire
+      payload on real hardware was **exactly** SPEC-01 §4.3 — no keypoints, no frames.
+- [x] **Confirms SPEC-04 §9's audio note** — the run fired the mic-silence warning
+      (PulseAudio default source = empty onboard jack), and Mode 3 ran anyway. Mode 3 is
+      the one mode that works with the mic unfixed.
+
+> ⚠️ **All postures read `absent`** in that run — the scene was empty/static, so this is
+> wiring evidence, **not** posture evidence. Whether bgsub reports `standing`/`walking`/
+> `lying` on a real person is the untested half, immediately below.
+
+### Outstanding — the bench (needs the Jetson + webcam + a person in frame)
 
 - [x] **Smoke (no camera):** `SENSOR=synthetic python3 -m edge.posture_selftest` → table
       prints, no traceback. Proves imports only. *(Run: prints `absent`/`standing`; the
