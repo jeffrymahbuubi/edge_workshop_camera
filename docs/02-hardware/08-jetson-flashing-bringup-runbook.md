@@ -5,7 +5,7 @@
 > machine (a Mac) and are **not** available here. Everything you need to continue
 > the Jetson bring-up is below.
 > For the broader workshop project (what the code does, the Jetson end-goal), read
-> `docs/01`–`07` — but that is background; **the active task is getting one Jetson
+> `docs/01-design/`–`docs/02-hardware/07` — but that is background; **the active task is getting one Jetson
 > Nano 4GB to boot.**
 
 ---
@@ -170,7 +170,7 @@ the now-updated QSPI boots it (tests the version-mismatch theory directly).
 
 For the edge-sensing workshop itself you likely **don't need the custom image at
 all**: flash **stock JetPack 4GB** (Etcher), then in the workshop code do
-`pip install -r requirements.txt` and run `python compare.py` (see `docs/07`). That
+`pip install -r requirements.txt` and run `python compare.py` (see `docs/02-hardware/07`). That
 sidesteps the whole custom-image bring-up.
 
 ---
@@ -185,7 +185,7 @@ sidesteps the whole custom-image bring-up.
 4. Which **power** method is in use (barrel jack + J48 vs micro-USB).
 5. Any `mmcblk0` / `EXT4-fs` / `Kernel panic` / `Unable to mount root fs` lines.
 
-Record answers back into this file (or `docs/03`'s open-questions section) so the
+Record answers back into this file (or `docs/01-design/03`'s open-questions section) so the
 context stays current for the next session.
 
 ---
@@ -193,8 +193,8 @@ context stays current for the next session.
 ## Pointers to the rest of the context pack
 
 - `docs/README.md` — index + one-paragraph project summary.
-- `docs/01`–`02` — what the workshop is + the code/architecture.
-- `docs/03` — the Jetson end-goal and porting concerns.
-- `docs/04`–`06` — the confirmed architecture (Mode 2 + hybrid escalation) and
+- `docs/01-design/01`–`02` — what the workshop is + the code/architecture.
+- `docs/01-design/03` — the Jetson end-goal and porting concerns.
+- `docs/01-design/04`–`06` — the confirmed architecture (Mode 2 + hybrid escalation) and
   deployment topology (Jetson = edge, laptop = relay/dashboard).
-- `docs/07` — the ordered action plan (start with `python compare.py`).
+- `docs/02-hardware/07` — the ordered action plan (start with `python compare.py`).

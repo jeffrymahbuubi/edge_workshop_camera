@@ -36,7 +36,7 @@ new machine, including the Jetson.
 The original workshop is a **laptop** teaching package. This repo is the work of
 porting it to **Jetson Nano 4GB** hardware as the edge device.
 
-The deployment topology (documented in `docs/06`) is:
+The deployment topology (documented in `docs/01-design/06`) is:
 
 ```
 [ Jetson Nano ]  --- LAN cable --->  [ Laptop ]
@@ -58,13 +58,14 @@ The Jetson never holds the API key — that's deliberate, and it's part of the l
 
 ## Docs worth knowing about
 
-- **[`docs/01-project-overview.md`](docs/01-project-overview.md)** — what the workshop is and why. Read first.
-- **[`docs/02-architecture-and-code.md`](docs/02-architecture-and-code.md)** — file-by-file walkthrough of the code.
-- **[`docs/08-jetson-flashing-bringup-runbook.md`](docs/08-jetson-flashing-bringup-runbook.md)** — bring-up and flashing, including a board that hangs at the NVIDIA logo.
-- **[`docs/09-internet-sharing-setup.md`](docs/09-internet-sharing-setup.md)** — giving the Jetson internet over the LAN cable from a laptop. macOS is verified on hardware; Windows is not yet written.
+- **[`docs/01-design/01-project-overview.md`](docs/01-design/01-project-overview.md)** — what the workshop is and why. Read first.
+- **[`docs/01-design/02-architecture-and-code.md`](docs/01-design/02-architecture-and-code.md)** — file-by-file walkthrough of the code.
+- **[`docs/02-hardware/08-jetson-flashing-bringup-runbook.md`](docs/02-hardware/08-jetson-flashing-bringup-runbook.md)** — bring-up and flashing, including a board that hangs at the NVIDIA logo.
+- **[`docs/02-hardware/09-internet-sharing-setup.md`](docs/02-hardware/09-internet-sharing-setup.md)** — giving the Jetson internet over the LAN cable from a laptop. Steps only; both macOS and Windows are verified on hardware. The *why* behind every step is in [`10-internet-sharing-findings.md`](docs/02-hardware/10-internet-sharing-findings.md).
+- **[`docs/03-tooling/11-nvidia-tooling-and-skills-findings.md`](docs/03-tooling/11-nvidia-tooling-and-skills-findings.md)** — which upstream NVIDIA tooling is worth using, and which skill can brick a Nano. Read before installing any NVIDIA Agent Skill.
 
 > **Heads-up on networking.** Two *different* designs are documented here and they
-> contradict each other. `docs/09` uses laptop internet-sharing with the Jetson as a
+> contradict each other. `docs/02-hardware/09` uses laptop internet-sharing with the Jetson as a
 > DHCP client (verified on hardware). `references/context/docs/DEMO_NETWORK_CHEATSHEET.md`
 > uses fixed IPs and explicitly avoids internet-sharing (not yet validated). Read
 > both before wiring anything up — which applies depends on whether the Jetson needs
@@ -83,7 +84,7 @@ The Jetson never holds the API key — that's deliberate, and it's part of the l
 - ⬜ Windows equivalent of the above
 - ⬜ Real webcam + threshold re-tuning on the Nano
 - ⬜ Mode 1 CPU/cadence limits on the Nano
-- ⬜ The escalation VLM path (`docs/05`) — blocked on an API provider decision
+- ⬜ The escalation VLM path (`docs/01-design/05`) — blocked on an API provider decision
 
 Open questions are recorded in the docs on purpose, next to the decisions they
 affect. When one is answered on the device, record the answer back into the doc.

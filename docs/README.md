@@ -13,19 +13,44 @@ the goal on the Jetson is*, without having to re-derive it from the source code.
 
 ## How to use this pack
 
-Read the files in order:
+The folders are grouped by **where you are when you need them** — at a desk
+deciding, at the bench with a Jetson in hand, or setting up dev tooling. The file
+numbers are a **reading order** that runs straight through `01` → `11`, so you can
+still read the pack front-to-back and ignore the folders entirely.
+
+### [`01-design/`](01-design) — understand and decide
+
+Read at a desk. No hardware needed.
 
 | File | What it gives you |
 |---|---|
-| [`01-project-overview.md`](01-project-overview.md) | What the project *is*: the workshop, its core teaching idea, the two modes, the application domain (home fall-detection). Read this first. |
-| [`02-architecture-and-code.md`](02-architecture-and-code.md) | The technical reference: file-by-file breakdown, the model-free algorithm, data flow, the relay API, config knobs. |
-| [`03-ultimate-goal-jetson.md`](03-ultimate-goal-jetson.md) | **The goal**: run this workshop on Jetson Nano 4GB. Candidate hardware roles for the Jetson (undecided — trade-offs documented), conceptual porting concerns, and the open questions to resolve on-device. |
-| [`04-mode2-llm-interpretation.md`](04-mode2-llm-interpretation.md) | The Mode 2 + hosted-LLM step: confirmed constraints (original Nano 4GB → no local LLM; hybrid connectivity → graceful degradation) and hosted-LLM options. *Extended by `05`.* |
-| [`05-hybrid-escalation-architecture.md`](05-hybrid-escalation-architecture.md) | **Confirmed architecture**: hybrid escalation — Mode 2 always-on base + upload the raw clip *only on a suspected fall* to a cloud interpreter. Answers "what's the Jetson's role" (smart first-pass gate) and proposes the cloud-interpreter options (VLM; Claude leading, NVIDIA free-tier fallback). |
-| [`06-jetson-allinone-web-dashboard.md`](06-jetson-allinone-web-dashboard.md) | **Confirmed deployment topology (boss-faithful)**: **Jetson = edge / sensing node, laptop = cloud/relay + web dashboard**, real LAN hop between them (Role A). Revised away from an earlier all-in-one draft. Lists the boss's target metrics (bandwidth, privacy, resilience) and the new SSE dashboard. |
-| [`07-getting-started-action-plan.md`](07-getting-started-action-plan.md) | **The *do* list**: ordered, machine-split action plan (MacBook now → Jetson later) with exact commands. Start here when moving from design to work. The recommended first step is `python compare.py` on the Mac. |
-| [`08-jetson-flashing-bringup-runbook.md`](08-jetson-flashing-bringup-runbook.md) | **Jetson bring-up / flashing runbook (Ubuntu 18.04 host)**. Self-contained context for a Claude session on the Ubuntu laptop. The active hardware problem: a Nano 4GB **hangs at the NVIDIA logo** (custom image is known-good on another 4GB board). Diagnosis-first plan: **serial console → recovery-mode `flash.sh`** if it's a bootloader/QSPI-stage hang. Read this when working on the physical device. |
-| [`09-internet-sharing-setup.md`](09-internet-sharing-setup.md) | **How a student's laptop gives the Jetson internet over the LAN cable** — the only path, since the Jetson has no Wi-Fi and the lab Wi-Fi isolates clients. **macOS: done and hardware-verified**; Windows: TBD. The core design: **the Jetson is a DHCP client**, because every host OS shares on a different subnet and NATs only for its own. Ships with `scripts/setup-internet-sharing-macos.sh` (read-only checker). Read this before the workshop, or when the Jetson can't reach the internet. |
+| [`01-project-overview.md`](01-design/01-project-overview.md) | What the project *is*: the workshop, its core teaching idea, the two modes, the application domain (home fall-detection). Read this first. |
+| [`02-architecture-and-code.md`](01-design/02-architecture-and-code.md) | The technical reference: file-by-file breakdown, the model-free algorithm, data flow, the relay API, config knobs. |
+| [`03-ultimate-goal-jetson.md`](01-design/03-ultimate-goal-jetson.md) | **The goal**: run this workshop on Jetson Nano 4GB. Candidate hardware roles for the Jetson (undecided — trade-offs documented), conceptual porting concerns, and the open questions to resolve on-device. |
+| [`04-mode2-llm-interpretation.md`](01-design/04-mode2-llm-interpretation.md) | The Mode 2 + hosted-LLM step: confirmed constraints (original Nano 4GB → no local LLM; hybrid connectivity → graceful degradation) and hosted-LLM options. *Extended by `05`.* |
+| [`05-hybrid-escalation-architecture.md`](01-design/05-hybrid-escalation-architecture.md) | **Confirmed architecture**: hybrid escalation — Mode 2 always-on base + upload the raw clip *only on a suspected fall* to a cloud interpreter. Answers "what's the Jetson's role" (smart first-pass gate) and proposes the cloud-interpreter options (VLM; Claude leading, NVIDIA free-tier fallback). |
+| [`06-jetson-allinone-web-dashboard.md`](01-design/06-jetson-allinone-web-dashboard.md) | **Confirmed deployment topology (boss-faithful)**: **Jetson = edge / sensing node, laptop = cloud/relay + web dashboard**, real LAN hop between them (Role A). Revised away from an earlier all-in-one draft. Lists the boss's target metrics (bandwidth, privacy, resilience) and the new SSE dashboard. *The filename is a leftover from the superseded all-in-one draft — the body overrides it.* |
+
+### [`02-hardware/`](02-hardware) — at the bench, Jetson in hand
+
+The **steps** (`07`–`09`) and the **why** (`10`) are deliberately separate: a
+runbook you can follow without reading, and the rationale for when a step
+surprises you.
+
+| File | What it gives you |
+|---|---|
+| [`07-getting-started-action-plan.md`](02-hardware/07-getting-started-action-plan.md) | **The *do* list**: ordered, machine-split action plan (MacBook now → Jetson later) with exact commands. Start here when moving from design to work. The recommended first step is `python compare.py` on the Mac. |
+| [`08-jetson-flashing-bringup-runbook.md`](02-hardware/08-jetson-flashing-bringup-runbook.md) | **Jetson bring-up / flashing runbook (Ubuntu 18.04 host)**. Self-contained context for a Claude session on the Ubuntu laptop. The active hardware problem: a Nano 4GB **hangs at the NVIDIA logo** (custom image is known-good on another 4GB board). Diagnosis-first plan: **serial console → recovery-mode `flash.sh`** if it's a bootloader/QSPI-stage hang. Read this when working on the physical device. |
+| [`09-internet-sharing-setup.md`](02-hardware/09-internet-sharing-setup.md) | **The runbook: how a student's laptop gives the Jetson internet over the LAN cable** — the only path, since the Jetson has no Wi-Fi and the lab Wi-Fi isolates clients. **Steps only.** Windows (run `scripts\setup-internet-sharing-windows.ps1` as admin → `ssh jetson@192.168.137.100`) and macOS (toggle Internet Sharing → `scripts/setup-internet-sharing-macos.sh`). Read this before the workshop, or when the Jetson can't reach the internet. |
+| [`10-internet-sharing-findings.md`](02-hardware/10-internet-sharing-findings.md) | **The *why* behind `09`** — findings, gotchas and design rationale, all hardware-verified or explicitly marked unverified. The core trade: **the Jetson is pinned to a static `192.168.137.100`, which pins the workshop to Windows**, because every host OS shares on a different subnet and NATs only for its own. Also holds [the rejected DHCP design](02-hardware/10-internet-sharing-findings.md#the-rejected-alternative-dhcp) — what to revert to if a Mac ever needs supporting. Read this when a step in `09` breaks, or before changing any address. |
+
+### [`03-tooling/`](03-tooling) — the dev environment
+
+About the machines we *build* on, not the ones we ship.
+
+| File | What it gives you |
+|---|---|
+| [`11-nvidia-tooling-and-skills-findings.md`](03-tooling/11-nvidia-tooling-and-skills-findings.md) | **What upstream NVIDIA tooling is worth using — and what bricks a Nano.** Of four repos in `references/nvidia-jetson/`, only **Elements** ships an MCP server (now wired into `.mcp.json`, and its UI bundle vendored offline to `static/vendor/elements/` — proven offline-safe in a real browser). Of the Jetson Agent Skills, only **3 of 6 are safe on a Nano 4GB**: they all assume Orin/Thor, so a **t210 reports `sku=unknown`**. **🛑 `jetson-optimize-memory` can brick the board** — it edits t234-only BCT carveouts and its only guard is prose. Read this before installing any NVIDIA skill, or before touching `.mcp.json`. |
 
 ## One-paragraph summary (if you read nothing else)
 
