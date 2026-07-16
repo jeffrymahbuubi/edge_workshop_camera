@@ -48,6 +48,12 @@ references/nvidia-jetson/
 # docs/01-design/06-deployment-topology-edge-relay.md.
 references/edge_voice_assistant/
 
+# microsoft/playwright-cli cloned in for reference. The tool we actually use is
+# the global npm install (@playwright/cli); this clone is only the upstream
+# source/docs to read. Nested git clone with its own .git, and not ours to
+# version.
+references/playwright-cli/
+
 # Editor / OS
 *.db
 .DS_Store
