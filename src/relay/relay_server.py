@@ -65,6 +65,12 @@ _live_cfg = {
 # Sane bounds so a stray slider value can't wedge the demo.
 _CFG_BOUNDS = {"loud_rms_thresh": (0.0, 1.0), "motion_level_thresh": (0.0, 1.0)}
 
+# Which mode the student has selected from the dashboard (SPEC-07). A supervisor
+# on the Jetson polls GET /mode and starts/stops the matching client -- so the
+# THREE separate programs stay separate (the boss's structure), and the button
+# just picks which one runs. None = nothing selected / all stopped.
+_desired_mode = {"mode": None}          # 1 | 2 | 3 | None
+
 LLM_MODEL = os.environ.get("LLM_MODEL", "claude-sonnet-5")
 
 # --- dashboard state -------------------------------------------------------
@@ -177,6 +183,11 @@ class ConfigPatch(BaseModel):
     slider can move one knob without touching the other."""
     loud_rms_thresh: Optional[float] = None
     motion_level_thresh: Optional[float] = None
+
+
+class ModePatch(BaseModel):
+    """Student's mode choice from the dashboard (SPEC-07). None stops everything."""
+    mode: Optional[int] = None
 
 
 @app.get("/health")
@@ -306,6 +317,23 @@ def set_config(patch: ConfigPatch):
         lo, hi = _CFG_BOUNDS[k]
         _live_cfg[k] = max(lo, min(hi, float(v)))
     return dict(_live_cfg)
+
+
+@app.get("/mode")
+def get_mode():
+    """The selected mode -- the Jetson supervisor polls this (SPEC-07)."""
+    return dict(_desired_mode)
+
+
+@app.post("/mode")
+def set_mode(patch: ModePatch):
+    """Pick the running mode from the dashboard. 1/2/3, or null to stop all.
+    The supervisor on the Jetson swaps clients to match within a couple seconds;
+    the live-mode badge then updates itself once data flows."""
+    if patch.mode not in (1, 2, 3, None):
+        raise HTTPException(422, "mode must be 1, 2, 3 or null")
+    _desired_mode["mode"] = patch.mode
+    return dict(_desired_mode)
 
 
 @app.post("/reset")

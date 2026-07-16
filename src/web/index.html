@@ -102,6 +102,15 @@
     .tune label b { font-variant-numeric: tabular-nums; }
     .tune input[type=range] { width: 100%; accent-color: var(--motion); }
     .tune-hint { font-size: .72rem; opacity: .7; margin: .4rem 0 0; line-height: 1.4; }
+
+    .modes-switch { display: inline-flex; border: 1px solid var(--panel-line);
+      border-radius: .5rem; overflow: hidden; }
+    .mode-btn { font: inherit; font-size: .8rem; padding: .25rem .7rem; border: 0;
+      border-inline-start: 1px solid var(--panel-line); background: transparent;
+      color: inherit; cursor: pointer; }
+    .mode-btn:first-child { border-inline-start: 0; }
+    .mode-btn:hover { background: rgba(128,128,128,.12); }
+    .mode-btn.active { background: var(--motion); color: #000; font-weight: 600; }
     .log .empty { opacity: .45; }
 
     .stack > * + * { margin-block-start: var(--gap); }
@@ -111,6 +120,11 @@
 
   <header>
     <h1>Edge Sensing — Live</h1>
+    <span class="modes-switch" role="group" aria-label="choose mode">
+      <button id="mode1-btn" class="mode-btn" type="button">Mode 1</button>
+      <button id="mode2-btn" class="mode-btn" type="button">Mode 2</button>
+      <button id="mode3-btn" class="mode-btn" type="button">Mode 3</button>
+    </span>
     <nve-badge id="conn" status="neutral">connecting…</nve-badge>
     <nve-badge id="live-mode" status="neutral">no data</nve-badge>
     <nve-button id="theme-btn" size="sm">light</nve-button>

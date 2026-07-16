@@ -263,6 +263,39 @@ for (const t of TUNERS) {
   });
 }
 
+// ------------------------------------------------ mode switch (SPEC-07)
+// Buttons POST the chosen mode to the relay; a supervisor on the Jetson swaps
+// clients to match. These buttons show the SELECTED mode; the live-mode badge
+// (driven by real data) shows what is actually running once it starts flowing.
+const MODE_BTNS = { 1: "mode1-btn", 2: "mode2-btn", 3: "mode3-btn" };
+
+function markMode(mode) {
+  for (const [m, id] of Object.entries(MODE_BTNS)) {
+    $(id).classList.toggle("active", Number(m) === mode);
+  }
+}
+
+async function syncMode() {
+  try {
+    const { mode } = await (await fetch("/mode")).json();
+    markMode(mode);
+  } catch { /* relay not up -- leave buttons unhighlighted */ }
+}
+
+for (const [m, id] of Object.entries(MODE_BTNS)) {
+  $(id).addEventListener("click", async () => {
+    const mode = Number(m);
+    markMode(mode);                       // optimistic; syncMode corrects if it fails
+    try {
+      await fetch("/mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+    } catch { syncMode(); }
+  });
+}
+
 const THEME_KEY = "nv-workshop-theme";
 function applyTheme(mode) {
   document.body.setAttribute("nve-theme", `${mode} inter`);
@@ -279,6 +312,8 @@ applyTheme(
 
 document.title = `Edge Sensing — ${DEVICE}`;
 loadTuning();
+syncMode();
+setInterval(syncMode, 3000);   // reflect switches made from another browser
 connect();
 setInterval(pollFrame, FRAME_MS);
 setInterval(renderChart, 1000);   // keep the window scrolling even when idle
