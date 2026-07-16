@@ -171,21 +171,54 @@ MODE 2     126 KB       ▶ now
       **`ratio: 2352.9` → renders as `2,353×`**, `posture: null` (guarded) ✅
 - [x] **`/latest.jpg` → 404 after switching to Mode 2** — the privacy panel blanks ✅
 
-### ⚠️ Outstanding — needs a human at the browser
+### ⚠️ Outstanding — the browser pass (next phase: playwright-cli)
 
-**None of this is verified.** The data path is proven; the *rendering* is not. No
-screenshot tooling was available, so these are honest unknowns, not assumed passes:
+**None of this is verified.** The data path is proven; the **rendering has never been
+loaded in a browser**. No screenshot tooling was available in the build session, so these
+are honest unknowns, not assumed passes.
 
-- [ ] **Open `http://localhost:8000/` and confirm it renders at all** — layout, Elements
-      components upgrading, fonts loading.
-- [ ] Video panel shows the frame in Mode 1 and **blanks** in Mode 2.
+#### How to bring it up
+
+```bash
+# 1. Relay + dashboard on the laptop (from src/)
+cd src && uv run --with fastapi --with "uvicorn[standard]" --with opencv-python \
+  --with numpy --with pydantic uvicorn relay.relay_server:app --host 0.0.0.0 --port 8000
+# 2. Open http://localhost:8000/          (?device=bench02 for the other bench)
+
+# 3. Feed it real data from the Jetson (PuTTY, not ssh -- no key installed):
+#    "/c/Program Files/PuTTY/plink" -batch -pw <pw> jetson@192.168.137.100 \
+#      "cd ~/EDGE-CAMERA && RELAY_URL=http://192.168.137.1:8000 SENSOR=webcam \
+#       timeout -s INT 8 python3 -m edge.mode1_streamer"
+#    ...then the same with edge.mode2_edge to make the ratio appear.
+
+# No hardware? Run a client on the laptop with SENSOR=synthetic and
+# RELAY_URL=http://localhost:8000 -- enough to exercise every panel.
+```
+
+#### The checks
+
+- [ ] **Does it render at all** — layout, Elements components upgrading (`nve-badge`,
+      `nve-dot`, `nve-alert`, `nve-button`), Inter font loading.
+- [ ] **Zero network requests leave the machine.** Assert this in Playwright by failing
+      on any request whose URL is not same-origin — the strongest version of the offline
+      guarantee, and the one static analysis can't give. `vendor/elements/smoke-test.html`
+      already demonstrates the `window.fetch` interception trick.
+- [ ] Video panel shows the frame in Mode 1 and **blanks** on the switch to Mode 2.
+      **If a face survives into Mode 2 that is a bug, not a glitch** — see SPEC-02 §7.
+- [ ] Ratio reads `—` with only one mode seen, then a number once both have sent.
 - [ ] Refresh mid-demo → chart repopulates from the ring buffer (not blank).
-- [ ] Open a **second browser** → both update. (Catches the SSE fan-out bug, SPEC-02 §5.)
-- [ ] Pull the cable in Mode 1 → gap in the chart, connection badge turns red.
-- [ ] Pull the cable in Mode 2 → gap, then **backfill** on reconnect.
-- [ ] **Unplug the internet** → dashboard fully functional. Static analysis says yes;
-      only a real load proves it.
+- [ ] **Two browsers at once** → both update. Catches the SSE fan-out bug (SPEC-02 §5) —
+      a single shared generator would deadlock the second client.
+- [ ] Pull the cable in Mode 1 → gap in the chart, connection badge turns red/"relay
+      unreachable".
+- [ ] Pull the cable in Mode 2 → gap, then **backfill** on reconnect, drawn at the
+      correct *timestamps* rather than bunched at "now".
 - [ ] Both **light and dark** themes — toggle in the header, persisted to `localStorage`.
+- [ ] Reset button clears totals, chart and log.
+
+> **Playwright note.** The page is entirely SSE- and timer-driven; there is no
+> "load complete" moment to await. Wait on **content** (e.g. `#ratio` not being `—`)
+> rather than on network idle, which will never arrive while `/events` is open.
 
 ---
 

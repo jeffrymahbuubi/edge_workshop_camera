@@ -102,12 +102,15 @@ nvidia-workshop/
 └── docs/
 ```
 
-- [ ] `common/` must import **only** `cv2` + `numpy` + stdlib. No `requests`, no
-      `fastapi` — it is the one thing both machines load.
-- [ ] Imports become package-qualified: `from common.features import extract_features`.
-      The boss's originals use flat `from features import …`; rewiring them is SPEC-02's
-      first task.
-- [ ] `src/web/vendor/elements/` is **already in place** (moved from `static/`).
+- [x] `common/` must import **only** `cv2` + `numpy` + stdlib. No `requests`, no
+      `fastapi` — it is the one thing both machines load. ✅ *Verified 2026-07-16: the
+      complete import set across `common/` is `base64`, `os`, `cv2`, `numpy` and
+      `common.config`.*
+- [x] Imports are package-qualified: `from common.features import extract_features`. ✅
+- [x] `src/web/vendor/elements/` in place (moved from `static/`); `index.html` + `app.js`
+      built (SPEC-03). ✅
+- [ ] `edge/mode3_posture.py` — the only file in this tree that does not exist yet
+      (SPEC-04).
 
 ---
 
