@@ -15,7 +15,7 @@ the goal on the Jetson is*, without having to re-derive it from the source code.
 
 The folders are grouped by **where you are when you need them** — at a desk
 deciding, at the bench with a Jetson in hand, or setting up dev tooling. The file
-numbers are a **reading order** that runs straight through `01` → `11`, so you can
+numbers are a **reading order** that runs straight through `01` → `12`, so you can
 still read the pack front-to-back and ignore the folders entirely.
 
 ### [`01-design/`](01-design) — understand and decide
@@ -47,7 +47,7 @@ the spec *first*. `SPEC-01` is the contract — if any spec contradicts it, `SPE
 
 ### [`02-hardware/`](02-hardware) — at the bench, Jetson in hand
 
-The **steps** (`07`–`09`) and the **why** (`10`) are deliberately separate: a
+The **steps** (`07`–`09`, `12`) and the **why** (`10`) are deliberately separate: a
 runbook you can follow without reading, and the rationale for when a step
 surprises you.
 
@@ -57,6 +57,7 @@ surprises you.
 | [`08-jetson-flashing-bringup-runbook.md`](02-hardware/08-jetson-flashing-bringup-runbook.md) | **Jetson bring-up / flashing runbook (Ubuntu 18.04 host)**. Self-contained context for a Claude session on the Ubuntu laptop. The active hardware problem: a Nano 4GB **hangs at the NVIDIA logo** (custom image is known-good on another 4GB board). Diagnosis-first plan: **serial console → recovery-mode `flash.sh`** if it's a bootloader/QSPI-stage hang. Read this when working on the physical device. |
 | [`09-internet-sharing-setup.md`](02-hardware/09-internet-sharing-setup.md) | **The runbook: how a student's laptop gives the Jetson internet over the LAN cable** — the only path, since the Jetson has no Wi-Fi and the lab Wi-Fi isolates clients. **Steps only.** Windows (run `scripts\setup-internet-sharing-windows.ps1` as admin → `ssh jetson@192.168.137.100`) and macOS (toggle Internet Sharing → `scripts/setup-internet-sharing-macos.sh`). Read this before the workshop, or when the Jetson can't reach the internet. |
 | [`10-internet-sharing-findings.md`](02-hardware/10-internet-sharing-findings.md) | **The *why* behind `09`** — findings, gotchas and design rationale, all hardware-verified or explicitly marked unverified. The core trade: **the Jetson is pinned to a static `192.168.137.100`, which pins the workshop to Windows**, because every host OS shares on a different subnet and NATs only for its own. Also holds [the rejected DHCP design](02-hardware/10-internet-sharing-findings.md#the-rejected-alternative-dhcp) — what to revert to if a Mac ever needs supporting. Read this when a step in `09` breaks, or before changing any address. |
+| [`12-mode3-selftest-runbook.md`](02-hardware/12-mode3-selftest-runbook.md) | **The runbook: test Mode 3 (posture & fall detection) yourself on the Jetson.** Where to run each command (command on the Jetson, watch on the laptop), the two tools (`posture_selftest` for the numbers, `mode3_posture` for the dashboard alarm), the stand/walk/lie protocol, and **the fade test** that sets the ceiling on `FALL_HOLD_S`. Read this at the bench with the camera in hand. |
 
 ### [`03-tooling/`](03-tooling) — the dev environment
 
