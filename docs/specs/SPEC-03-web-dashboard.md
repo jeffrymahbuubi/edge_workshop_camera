@@ -52,22 +52,29 @@ passes on hardware.
 
 ## 2. The video panel — this *is* the privacy lesson
 
-Not decoration. **The panel's emptiness in Mode 2 is the deliverable.**
+Not decoration. **The panel's emptiness in Mode 2 is the deliverable** — and with Mode 3
+it became a three-way progression instead of a two-way one:
 
 ```
-MODE 1                MODE 2
-┌────────────┐        ┌────────────┐
-│  [ face ]  │        │  ␀         │
-│  visible   │        │  no image  │
-│  on relay  │        │  ever sent │
-└────────────┘        └────────────┘
-  ↑ privacy exposed     ↑ private
+MODE 1                MODE 2                MODE 3
+┌────────────┐        ┌────────────┐        ┌────────────┐
+│  [ face ]  │        │  ␀         │        │    ᛭       │
+│  visible   │        │  no image  │        │  skeleton  │
+│  on relay  │        │  ever sent │        │  no pixels │
+└────────────┘        └────────────┘        └────────────┘
+  ↑ privacy exposed     ↑ private             ↑ private AND understood
+  ~583 KB of pixels     ~200 B vector         562 B of coordinates
 ```
 
 In Mode 1 the relay *has* the JPEGs — it must decode them to run `features.py` — so it
 can show faces. In Mode 2 it **physically cannot**: no image ever crossed the LAN. The
 same panel going blank on a mode switch turns *"faces leave the room"* from a claim into
 something a student watches happen.
+
+**Mode 3 (2026-07-16) is the strongest panel of the three**: a moving stick figure over an
+empty background. It is not empty because nothing happened — it is **empty of pixels**
+while still proving the Jetson understood the person completely. The browser draws it from
+17 coordinates; `/latest.jpg` still 404s the whole time.
 
 - [ ] `<img src="/latest.jpg">` refreshed ~5/s with a cache-buster (`?t=<ms>`).
 - [ ] **On 404, show the placeholder** — "no image ever sent" — not a broken-image icon.
@@ -302,8 +309,13 @@ Decisions taken while building, worth knowing before you change something:
       Per-device rows deferred until a second bench exists. (SPEC-02 §10)
 - [ ] The caregiver `note` field is **not rendered** — always `null` while the LLM is
       deferred to last priority. Add when the interpreter lands.
-- [ ] Posture is a single line (`posture` + `torso_angle`). SPEC-04 may want the
-      timeline + alarm-banner treatment. *(SPEC-04 built and shipped against this panel
-      unchanged — verified live: posture read `lying (78°)`, the alarm banner carried the
-      rule's `reason`. The pose-backend `torso_angle` path already renders, so SPEC-05
-      needs no dashboard work either. A timeline is still open.)*
+- [x] Posture is a single line (`posture` + `score`) plus the alarm banner carrying the
+      rule's `reason`. *(`torso_angle` is gone — it belonged to SPEC-05's abandoned
+      `trt_pose` design and was never produced. MoveNet reports `score` instead.)*
+- [x] **The skeleton canvas (SPEC-04 §5.1)** — hand-rolled `<canvas>`, for the same reason
+      the chart is hand-rolled SVG (§8): no Elements component draws a skeleton, and this
+      one is load-bearing. Joints below `KP_DRAW_CONF` (0.2) are not drawn — an
+      unconfident joint invents a limb. Red on `abnormal`, NVIDIA green otherwise.
+      ⚠️ `.has-skeleton img { display: none }` — a skeleton must never render over a
+      leftover Mode 1 frame, which `/latest.jpg`'s 404 only clears on the *next* poll.
+- [ ] A posture **timeline** is still open.

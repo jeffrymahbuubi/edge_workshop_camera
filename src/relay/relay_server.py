@@ -169,12 +169,17 @@ class FeaturePayload(BaseModel):
 
 
 class PosturePayload(BaseModel):
-    posture: str                                # standing|walking|lying|absent
+    posture: str                       # standing|walking|sitting|lying|absent
     abnormal: bool = False
     reason: str = ""
-    torso_angle: Optional[float] = None         # pose backends only
-    confidence: Optional[float] = None          # pose backends only
-    backend: str = "bgsub"
+    # The skeleton (SPEC-01 §4.3, Mode A). 17 COCO keypoints as [x, y, score],
+    # normalised 0..1. These DO cross the LAN by decision: ~1 KB of joints is not
+    # Mode 1's ~583 KB of faces, and it is what the dashboard draws. Raw pixels
+    # still never travel -- there is deliberately no `image` field here.
+    keypoints: Optional[List[List[float]]] = None
+    bbox: Optional[List[float]] = None          # [x, y, w, h], normalised 0..1
+    score: Optional[float] = None               # mean confidence of trusted joints
+    backend: str = "movenet"
     context: str = ""
 
 
@@ -268,16 +273,28 @@ async def ingest_features(f: FeaturePayload, request: Request,
 @app.post("/ingest_posture")
 async def ingest_posture(p: PosturePayload, request: Request,
                          x_device_token: str = Header(...)):
-    """Mode 3: the edge ran posture estimation AND the fall rule; we display it."""
+    """Mode 3: the edge ran MoveNet AND the fall rule; we only display it.
+
+    Note what this handler does NOT do: no inference, no rule, no decision. The
+    Jetson sent a verdict and a skeleton; the laptop is a screen. That asymmetry
+    against /ingest_raw -- which decodes frames and computes everything here -- is
+    the whole lesson, sitting in one file.
+    """
     info = auth(x_device_token)
     device = info["device"]
     rate(device)
     bandwidth.record(device, "mode3", _content_length(request))
-    _latest_jpeg.pop(device, None)          # Mode 3 sends no image either
+    # Mode 3 sends no image, so drop any frame Mode 1 left behind: a stale face
+    # lingering in the video panel would wreck the privacy demo. The skeleton
+    # arrives as coordinates and is drawn by the browser -- never as pixels.
+    _latest_jpeg.pop(device, None)
 
     if p.abnormal:
         flag = "FALL?"
-    elif p.posture in ("walking", "standing"):
+    elif p.posture in ("walking", "standing", "sitting"):
+        # `sitting` is a person, present and fine -- it must read person-active,
+        # not "quiet". MoveNet introduced this label; under bgsub it never
+        # occurred, which is why this list used to have two entries.
         flag = "person-active"
     else:
         flag = "quiet"

@@ -71,3 +71,9 @@ Thumbs.db
 # Build output
 dist/
 build/
+
+# The colleague's Mode 3 reference folder ships its own copy of the MoveNet model.
+# The tracked one the code actually loads is src/models/movenet_lightning.tflite --
+# committing a second 4.7 MB blob would duplicate it in history forever. His .py and
+# .md alongside it ARE tracked: they were one `git clean -fd` from gone.
+references/context/edge-workshop-camera-en/mode3/*.tflite

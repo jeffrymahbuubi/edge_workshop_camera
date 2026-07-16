@@ -46,12 +46,18 @@ MOTION_LEVEL_THRESH = 0.006   # fraction of changed pixels above which = moving
 MIN_BLOB_AREA = 60            # ignore motion blobs smaller than this (px)
 
 # --- mode 3: the fall rule (SPEC-04) ---
-# How long "lying" must persist after an upright posture before it is a fall.
+# Mode 3 is MoveNet keypoints and nothing else -- there is no backend switch.
+# The pose knobs (KP_CONF, WALK_MOVE_THRESH, SIT_DROP_RATIO, SMOOTH_N, ...) are
+# env vars read in edge/pose.py, deliberately left there with the model they
+# belong to rather than hoisted here.
 #
-# Default 3s is a COMPROMISE FORCED BY bgsub, not a clinical choice: MOG2
-# (history=120 @ 15fps) learns a motionless person into the background in ~8s
-# and they read "absent" -- the exact state the hold needs. 3s fires before that
-# fade. With a pose backend there is no fade to race and this can go 5-10s.
+# How long "lying" must persist after an upright posture before it is a fall.
+# 3s was originally a compromise forced by background subtraction, which faded a
+# motionless person into the background within ~2s (measured) -- the exact state
+# the hold needs. MoveNet does not fade, so that ceiling is gone and this could
+# now go 5-10s. It stays at 3 because that is what was validated on hardware,
+# and because a caregiver alarm that waits 10s to fire is a worse product. The
+# number is now a CHOICE rather than a compromise.
 FALL_HOLD_S = float(os.environ.get("FALL_HOLD_S", "3"))
 # An upright posture must have been seen this recently for a "lying" to count as
 # a fall. Without it, a person already lying when the camera starts reads as a

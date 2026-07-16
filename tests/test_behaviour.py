@@ -43,10 +43,35 @@ def test_walk_then_lying_held_fires():
 
 
 def test_standing_counts_as_upright():
-    """UPRIGHT = {standing, walking} -- a fall from standing is still a fall."""
+    """UPRIGHT = {standing, walking, sitting} -- a fall from standing is a fall."""
     m = monitor()
     v = feed(m, [("standing", 0), ("lying", 1), ("lying", 4)])
     assert v["abnormal"] is True
+
+
+def test_sitting_counts_as_upright_so_a_fall_from_a_chair_fires():
+    """MoveNet added `sitting` (SPEC-01 §5). Sitting is UPRIGHT for this rule.
+
+    This is the colleague's validated semantics (`mode3_edge.py` counts sitting in
+    its upright lookback), and it matters: falling out of a chair is the archetypal
+    elderly fall. If sitting were inert, the most likely real fall would never fire.
+    """
+    m = monitor()
+    v = feed(m, [("sitting", 0), ("lying", 1), ("lying", 4)])
+    assert v["abnormal"] is True
+
+
+def test_sitting_releases_the_latch():
+    """Sitting up after a fall means they recovered -- clear the alarm.
+
+    The colleague's rule clears on ANY non-lying label; ours clears only on
+    UPRIGHT, and `sitting` joining UPRIGHT is what makes the two agree here.
+    """
+    m = monitor()
+    feed(m, [("walking", 0), ("lying", 1), ("lying", 4)])       # fired
+    v = feed(m, [("sitting", 5)])
+    assert v["abnormal"] is False
+    assert v["reason"] == ""
 
 
 def test_does_not_fire_before_hold_elapses():
@@ -148,6 +173,55 @@ def test_reason_is_frozen_at_the_moment_it_fires():
     assert at_fire == later
 
 
+def test_reason_counts_up_while_the_fall_is_still_building():
+    """Before firing, `reason` shows the hold building: "lying 1/3s".
+
+    Freezing applies AFTER the alarm fires (that is what would churn the banner).
+    While it is still building, counting up is the opposite of noise -- it is the
+    only visible evidence the rule is working, and the colleague's guide §7 makes
+    it a pass criterion.
+    """
+    m = monitor()
+    feed(m, [("walking", 0)])
+    m.update("lying", now=1)                                # episode begins, held=0
+    building = m.update("lying", now=2)["reason"]           # held=1s
+    assert "1" in building and "3" in building              # "lying 1/3s"
+    assert m.update("lying", now=3)["reason"] != building   # advances to 2/3s
+    assert m.update("lying", now=4)["abnormal"] is True     # then fires
+
+
+def test_building_reason_does_not_claim_abnormal():
+    """A counting reason must never be mistaken for a fired alarm."""
+    m = monitor()
+    feed(m, [("walking", 0)])
+    v = m.update("lying", now=2)
+    assert v["abnormal"] is False
+    assert "upright" not in v["reason"]      # the fired text says "upright→lying"
+
+
+def test_a_building_count_is_cleared_when_they_go_absent():
+    """A half-built "lying 1/3s" must not outlive the person it was counting.
+
+    Introduced with the counting reason: cancelling a pending fall has to clear
+    its text too, or the panel keeps counting someone who has left the frame.
+    """
+    m = monitor()
+    feed(m, [("walking", 0), ("lying", 1), ("lying", 2)])       # building
+    v = m.update("absent", now=3)
+    assert v["abnormal"] is False
+    assert v["reason"] == ""
+
+
+def test_absent_keeps_a_FIRED_reason_not_just_the_flag():
+    """The latch survives absent (tested above) -- so must its text, or the
+    banner goes blank while still claiming abnormal."""
+    m = monitor()
+    feed(m, [("walking", 0), ("lying", 1), ("lying", 4)])       # fired
+    v = m.update("absent", now=5)
+    assert v["abnormal"] is True
+    assert "upright" in v["reason"]
+
+
 def test_reason_is_human_text_naming_the_transition():
     """`reason` goes straight to the caregiver panel (SPEC-04 §2)."""
     m = monitor()
@@ -177,10 +251,15 @@ def test_consumes_labels_only_no_backend_coupling():
     assert set(v) == {"abnormal", "reason"}
 
 
-@pytest.mark.parametrize("bogus", ["sitting", "", None, "LYING"])
+@pytest.mark.parametrize("bogus", ["", None, "LYING", "crouching"])
 def test_unknown_labels_are_inert_not_crashes(bogus):
     """An unrecognised label must not fire and must not raise -- a backend that
-    invents a label should degrade, not take the Jetson down mid-demo."""
+    invents a label should degrade, not take the Jetson down mid-demo.
+
+    `sitting` used to be listed here as bogus. It is now a REAL label (MoveNet,
+    SPEC-01 §5) and has its own tests above -- the exact kind of drift this
+    parametrize exists to catch, so keep it in sync with the contract.
+    """
     m = monitor()
     feed(m, [("walking", 0)])
     v = m.update(bogus, now=1)

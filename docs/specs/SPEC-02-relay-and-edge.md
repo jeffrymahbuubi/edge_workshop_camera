@@ -60,16 +60,19 @@ The boss's package is flat; SPEC-01 splits it by machine. That breaks his import
 ### 2.1 Run as modules — this is now mandatory
 
 Package-qualified imports mean **scripts can no longer be run directly**. `python3
-posture_selftest.py` puts `edge/` on `sys.path` and `common` becomes invisible.
+mode3_posture.py` puts `edge/` on `sys.path` and `common` becomes invisible.
 
 | Machine | From | Command |
 |---|---|---|
 | Laptop | `src/` | `uv run python -m relay.compare` |
 | Jetson | `~/EDGE-CAMERA/` | `python3 -m edge.mode2_edge` |
 
-- [ ] **`POSTURE_TEST_GUIDE.md` §4–5 is now stale** — it says `python3
-      posture_selftest.py`. Either update the guide or add a thin launcher shim.
-      A TA following it verbatim gets `ModuleNotFoundError: common`.
+- [ ] ⚠️ **The colleague's `MODE3_TEST_GUIDE.md` §3/§5 is stale the same way** — it says
+      `scp`-the-flat-files then `python3 mode3_edge.py`, which is his original layout, not
+      this repo's packages. A TA following it verbatim gets `ModuleNotFoundError: common`.
+      Here it is `python3 -m edge.mode3_posture` from `~/EDGE-CAMERA/`, and the deploy is
+      `edge/` + `common/` + `models/`. *(The same note used to name
+      `POSTURE_TEST_GUIDE.md`, which died with bgsub.)*
 - [x] Verified with the offline smoke test (no hardware, no network):
       `cd src && uv run python -m relay.compare` → **689×, motion 12/12, falls 2/2** ✅
 
@@ -215,9 +218,8 @@ Run in order. Each step is cheap and isolates the next failure.
       falls 2/2** ✅ *(2026-07-16 — exactly the README's expected values, so the §2
       import rewiring preserved the boss's behaviour precisely)*
 - [x] **Imports on the Jetson** under python3.8 — `common.config`, `common.features`,
-      `common.codec`, `edge.sensor`, `edge.posture` all import ✅
-- [x] **`trt` backend raises cleanly** — `NotImplementedError`, as SPEC-05 assumes ✅
-- [x] **Posture selftest (synthetic)** — runs, no traceback ✅
+      `common.codec`, `edge.sensor`, `edge.pose` all import ✅
+      *(`edge.posture` was the bgsub backend — deleted 2026-07-16, SPEC-04 §3.1.)*
 - [x] **Webcam selftest on the Jetson** — 15 frames/s at 320×240 from `/dev/video0` ✅
 - [x] **Jetson → laptop relay reachable** — `GET /health` → `200 {"ok":true}` across the
       ICS link. **Windows firewall does not block it** ✅
@@ -334,19 +336,24 @@ pactl set-default-source alsa_input.usb-046d_C270_HD_WEBCAM_200901010001-02.anal
 > 3. **`lsusb`/`arecord` proving the hardware works does not mean your library sees it.**
 >    Four layers disagreed; only `pactl info` told the truth.
 
-- [ ] ⚠️ **`pactl set-default-source` is runtime-only — it will NOT survive a reboot.**
-      Make it persistent before cloning (a `~/.config/pulse/default.pa` line or a
-      systemd user unit) and add it to the pre-clone checklist in SPEC-05 §6. **Every
-      student board will otherwise boot deaf.**
-- [ ] ⚠️ **WORSE than just "not persistent" — observed 2026-07-16 (second bench session):
-      the runtime `set-default-source` KEEPS REVERTING to the onboard jack across new
-      processes.** Set it, run a client, `loud` fires; start the next client (e.g. via the
-      SPEC-07 supervisor) and it is silent again with the default back on
-      `alsa_input.platform-sound.analog-stereo`. So even for a *single* live session the
-      runtime command is unreliable once you launch more than one client. **Treat the
-      persistent PulseAudio-config fix as the ONLY real fix** — do not rely on the runtime
-      command for a demo. `AUDIO_DEVICE=C270` is also flaky the same way (PortAudio
-      intermittently "cannot see cards that PulseAudio owns" and falls back to silence).
+- [x] ✅ **FIXED AND PERSISTED 2026-07-16 — do not re-diagnose this.** `pactl
+      set-default-source` is runtime-only and, worse, **kept reverting** to the onboard
+      jack across new processes (set it, run a client, `loud` fires; start the next client
+      via the SPEC-07 supervisor and it is silent again). So the runtime command was never
+      a fix even for one session. The config **is** the fix:
+
+      ```bash
+      # ~/.config/pulse/default.pa (on the Jetson)
+      .include /etc/pulse/default.pa
+      set-default-source alsa_input.usb-046d_C270_HD_WEBCAM_200901010001-02.analog-mono
+      ```
+
+      Verified across a PulseAudio daemon restart, then asserted on **real captured
+      audio**: `audio_rms` **0.0 → 0.012–0.026**. Leave `AUDIO_DEVICE` unset —
+      `AUDIO_DEVICE=C270` was flaky the same way (PortAudio intermittently "cannot see
+      cards that PulseAudio owns" and falls back to silence). Two caveats remain in
+      **SPEC-01 §6 step 3**: a full reboot is untested, and the source name embeds the
+      webcam's serial.
 - [ ] Retune `LOUD_RMS_THRESH` (0.05). Measured ambient ≈ **0.017–0.045** — the C270's
       gain is high. Speech reads ~0.098, so 0.05 does separate them, but the margin is
       thin and the room will be noisy on the day. **Now runtime-tunable from the dashboard

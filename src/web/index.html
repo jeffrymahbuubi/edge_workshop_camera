@@ -63,8 +63,19 @@
     }
     .video-wrap img { width: 100%; height: 100%; object-fit: cover; display: none; }
     .video-wrap.has-frame img { display: block; }
+    /* Mode 3's skeleton. Drawn from 17 coordinates the browser received -- there
+       is no image underneath it, which is the entire point: the panel is not
+       empty because nothing happened, it is empty of PIXELS. */
+    .video-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+    .video-wrap.has-skeleton canvas { display: block; }
+    /* A skeleton must NEVER render over a leftover Mode 1 frame. /latest.jpg
+       404s in Mode 3 so the frame does clear itself -- but only on the next poll,
+       and one frame of skeleton-over-face would contradict the exact claim this
+       panel is making. Belt and braces: the skeleton wins immediately. */
+    .video-wrap.has-skeleton img { display: none; }
     .placeholder { text-align: center; padding: 1rem; }
-    .video-wrap.has-frame .placeholder { display: none; }
+    .video-wrap.has-frame .placeholder,
+    .video-wrap.has-skeleton .placeholder { display: none; }
     .placeholder .glyph { font-size: 2rem; opacity: .35; line-height: 1; }
     .placeholder .msg { margin-block-start: .5rem; font-size: .82rem; font-weight: 600; }
     .placeholder .why { margin-block-start: .25rem; font-size: .72rem; opacity: .6; max-width: 22ch; margin-inline: auto; }
@@ -202,6 +213,8 @@
         <h2>What the relay can see</h2>
         <div class="video-wrap" id="video-wrap">
           <img id="frame" alt="Live frame received by the relay">
+          <canvas id="skeleton" width="320" height="240"
+                  aria-label="Pose skeleton reconstructed from keypoints"></canvas>
           <div class="placeholder">
             <div class="glyph">⊘</div>
             <div class="msg">no image</div>

@@ -6,19 +6,25 @@ Formally: an upright posture, followed by a transition to `lying`, held for
 FALL_HOLD_S seconds.
 
 This module consumes POSTURE LABELS AND NOTHING ELSE. It never sees a frame, a
-bbox or a keypoint, so it behaves identically under `bgsub` and `trt_pose` --
-which is what lets SPEC-05 swap the backend in with no rework here. Keep it that
-way: if this file ever imports cv2, the swap has been broken.
+bbox or a keypoint, so it behaves identically under `bgsub` and `movenet`. That
+design was speculative when written; it PAID OFF when Mode 3 swapped from
+background subtraction to MoveNet keypoints -- this file needed one line (adding
+`sitting`) and nothing else. Keep it that way: if this file ever imports cv2 or
+touches a keypoint, the swap has been broken.
 
-Only the verdict leaves the device (SPEC-01 §4.3). The rule runs here, on the
-Jetson, for the same reason Mode 2 computes features here: shipping the raw
-signal to the laptop to decide would repeat Mode 1's mistake in a new costume.
+The rule runs here, on the Jetson, for the same reason Mode 2 computes features
+here: shipping the raw signal to the laptop to decide would repeat Mode 1's
+mistake in a new costume.
 """
 import time
 
 from common.config import FALL_HOLD_S, UPRIGHT_LOOKBACK_S
 
-UPRIGHT = ("standing", "walking")
+# `sitting` is UPRIGHT, not a posture of its own concern: falling out of a chair
+# is the archetypal fall this workshop is about, so a sitting->lying transition
+# must fire. This matches the colleague's hardware-validated rule, which counts
+# standing/walking/sitting alike in its upright lookback.
+UPRIGHT = ("standing", "walking", "sitting")
 
 
 class BehaviourMonitor:
@@ -61,12 +67,19 @@ class BehaviourMonitor:
             # "absent" and anything unrecognised. Cancel a PENDING fall but do
             # NOT clear a latched one.
             #
-            # With bgsub, `absent` is usually the MOG2 fade (SPEC-04 §1.2) -- a
-            # motionless person being learned into the background. Treating that
-            # as continued lying would infer the fall from a bug; treating it as
-            # "got up" would erase an alarm that already fired. So: cancel
-            # pending, keep latched.
+            # Under bgsub `absent` was usually the MOG2 fade (SPEC-04 §1.2) -- a
+            # motionless person learned into the background. Under MoveNet there
+            # is no fade, so `absent` means the keypoints genuinely went away
+            # (left the frame, or occluded). Either way the reasoning holds:
+            # treating it as continued lying would invent a fall from missing
+            # data; treating it as "got up" would erase an alarm that already
+            # fired. So: cancel pending, keep latched.
             self._lying_since = None
+            if not self._abnormal:
+                # A half-built count ("lying 1/3s") must not outlive the person
+                # it was counting -- but a FIRED alarm's reason must survive, or
+                # absent would quietly blank the banner it just raised.
+                self._reason = ""
 
         return {"abnormal": self._abnormal, "reason": self._reason}
 
@@ -86,5 +99,13 @@ class BehaviourMonitor:
         if held >= self.fall_hold_s:
             self._abnormal = True
             # Frozen at the moment of firing: recomputing it every second would
-            # churn the caregiver's banner (3s, 4s, 5s...) for one event.
+            # churn the caregiver's banner (3s, 4s, 5s...) for ONE event.
             self._reason = f"upright→lying held {int(held)}s"
+        else:
+            # Still building. Counting up here is not the churn the freeze above
+            # guards against -- that is about the text moving AFTER the alarm has
+            # fired. Before it fires, "lying 1/3s" is the only visible evidence
+            # the rule is armed and working, which is why the colleague's guide
+            # §7 makes it a pass criterion. It must never read like a fired
+            # alarm: no "upright→lying" wording until `abnormal` is actually True.
+            self._reason = f"lying {int(held)}/{int(self.fall_hold_s)}s"

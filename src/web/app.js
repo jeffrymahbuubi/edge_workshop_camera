@@ -52,11 +52,12 @@ function renderStatus(ev) {
   $("blobs").textContent = f?.n_blobs ?? "—";
   $("fall").textContent = f ? (f.fall_suspected ? "YES" : "—") : "—";
 
-  // posture stays null until Mode 3 exists (SPEC-04); never assume it is there
+  // posture is null outside Mode 3 (SPEC-04); never assume it is there
   const p = ev.posture;
   $("posture").textContent = p
-    ? p.posture + (p.torso_angle != null ? ` (${Math.round(p.torso_angle)}°)` : "")
+    ? p.posture + (p.score != null ? ` (${p.score.toFixed(2)})` : "")
     : "—";
+  drawSkeleton(p);
 
   const fall = f?.fall_suspected || p?.abnormal;
   const alert = $("fall-alert");
@@ -102,25 +103,73 @@ function renderBandwidth(b) {
   badge.setAttribute("status", b.live_mode ? "success" : "neutral");
 }
 
-// --------------------------------------------------------- video / privacy
+// --------------------------------------------------------- the skeleton (Mode 3)
 
-const PRIVACY = {
-  1: ["raw frames crossed the LAN, so the relay can show your face",
-      "Mode 1 sends every pixel — the relay decodes them to find motion."],
-  2: ["Mode 2 sent no image — only a feature vector",
-      "Mode 3 sends only a posture label — still no image."],
-};
+// COCO/MoveNet 17-point topology, as pairs of keypoint indices to join.
+const EDGES = [[0,1],[0,2],[1,3],[2,4],[0,5],[0,6],[5,7],[7,9],[6,8],[8,10],
+               [5,6],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
+const KP_DRAW_CONF = 0.2;   // below this a joint is a guess; drawing it invents a limb
+
+// Hand-rolled canvas, for the same reason the chart is hand-rolled SVG (SPEC-03
+// §8): no Elements component draws a skeleton, and this one is load-bearing.
+// It renders ONLY coordinates — there is deliberately no image beneath it. The
+// panel showing a moving stick figure over an empty background IS the lesson:
+// the Jetson understood the person without the laptop ever seeing them.
+function drawSkeleton(p) {
+  const wrap = $("video-wrap");
+  const kp = p?.keypoints;
+  if (!kp || !kp.length) {
+    wrap.classList.remove("has-skeleton");
+    return;
+  }
+  const cv = $("skeleton"), ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const abn = !!p.abnormal;
+  const stroke = abn ? "#ff6b6b" : "#76b900";     // NVIDIA green, or alarm red
+
+  if (p.bbox) {
+    const [bx, by, bw, bh] = p.bbox;
+    ctx.strokeStyle = abn ? "#ff6b6b" : "rgba(128,128,128,.55)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx * W, by * H, bw * W, bh * H);
+  }
+
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 2;
+  for (const [a, b] of EDGES) {
+    const q = kp[a], r = kp[b];
+    if (q && r && q[2] > KP_DRAW_CONF && r[2] > KP_DRAW_CONF) {
+      ctx.beginPath();
+      ctx.moveTo(q[0] * W, q[1] * H);
+      ctx.lineTo(r[0] * W, r[1] * H);
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = stroke;
+  for (const q of kp) {
+    if (q && q[2] > KP_DRAW_CONF) {
+      ctx.beginPath();
+      ctx.arc(q[0] * W, q[1] * H, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  wrap.classList.add("has-skeleton");
+}
+
+// --------------------------------------------------------- video / privacy
 
 function renderProvenance() {
   const p = $("provenance");
-  if (latestMode === 1) p.textContent = PRIVACY[1][1];
+  if (latestMode === 1) p.textContent = "Mode 1 sends every pixel — the relay decodes them to find motion.";
   else if (latestMode === 2) p.textContent = "Mode 2 computed the features on the Jetson and sent ~200 bytes. Raw pixels never left the device.";
-  else if (latestMode === 3) p.textContent = "Mode 3 ran posture estimation on the Jetson and sent only its verdict.";
+  else if (latestMode === 3) p.textContent = "Mode 3 ran MoveNet on the Jetson. The skeleton is drawn from ~1 KB of coordinates — no pixel of you crossed the LAN.";
   else p.textContent = "";
 
   $("why-blank").textContent =
     latestMode === 2 ? "Mode 2 sent no image — only a feature vector"
-    : latestMode === 3 ? "Mode 3 sent no image — only a posture verdict"
+    : latestMode === 3 ? "Mode 3 sent no image — only a skeleton"
     : "waiting for data…";
 }
 

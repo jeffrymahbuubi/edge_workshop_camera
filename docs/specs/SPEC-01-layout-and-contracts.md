@@ -7,7 +7,7 @@
 |---|---|
 | **Status** | 🟢 **Realized** for Modes 1+2 (2026-07-16) — `src/` layout built, Mode 1/2 contract live and hardware-validated. Mode 3 (§4.3) and the posture contract (§5) remain 🟡 specified-only. |
 | **Depends on** | [`docs/01-design/06-deployment-topology-edge-relay.md`](../01-design/06-deployment-topology-edge-relay.md) (locked topology) |
-| **Depended on by** | SPEC-02 (🟢 built), SPEC-03, SPEC-04, SPEC-05 |
+| **Depended on by** | SPEC-02 (🟢 built), SPEC-03, SPEC-04 *(SPEC-05 deleted 2026-07-16 — its pre-clone checklist is now §6 here)* |
 
 This file fixes two things everything else builds on: **where code lives**, and **what
 the two machines promise each other over the wire**. It is the contract; if the Jetson
@@ -25,21 +25,20 @@ not assumptions — several overturned what the docs previously assumed.
 | L4T / JetPack | `R32.7.4`, `BOARD: t210ref` | Jetson Nano, JetPack 4.6.4 |
 | **`python3`** | **3.8.0** (`/usr/bin/python3` → `python3.8`) | **Not 3.6.** See §2 — this reverses an earlier assumption |
 | `python3.6` | present but *not* default | Do not target it |
-| OpenCV | `cv2` 4.11.0 | `features.py` / `posture.py` run as-is |
+| OpenCV | `cv2` 4.11.0 | `features.py` / `pose.py` run as-is |
 | NumPy | 1.23.5 | ✅ |
-| **PyTorch** | **1.11.0a0**, `torch.cuda.is_available() == True`, `NVIDIA Tegra X1` | **Already installed** — SPEC-05's main cost is already paid |
-| torchvision | 0.12.0a0 | ✅ |
-| TensorRT | 8.2.1.8 | ✅ |
+| **TensorFlow** | ✅ **2.13.1**, `tf.lite.Interpreter` works | **Mode 3 runs on this.** Already installed — the whole SPEC-05 install plan turned out unnecessary |
+| **`tflite_runtime`** | ❌ **absent, and will stay absent** | The Coral wheel needs **GLIBC 2.29**; Ubuntu 18.04 has less. `pose.py` catches it and falls back to `tf.lite` — that fallback is the **only** path on this board |
+| **MoveNet model** | ✅ `~/EDGE-CAMERA/models/movenet_lightning.tflite`, 4.7 MB | Loads in **7.0 s**; inference **0.08 s/frame (12.6 fps)** vs 1 fps needed |
+| PyTorch / torchvision / TensorRT | 1.11.0a0 (CUDA ✅) / 0.12.0a0 / 8.2.1.8 | Installed, but **Mode 3 does not use them** — MoveNet is TFLite on CPU |
 | `requests` | 2.32.3 | Edge clients work |
-| **`sounddevice`** | ✅ **0.5.5 installed** 2026-07-16 (+ `libportaudio2`) | ⚠️ Not sufficient alone — the mic must be *selected*, see SPEC-02 §9.3 |
-| Microphone | ✅ Logitech **C270 webcam mic**, `hw:2,0`, **index 11** | The system default (18) is the onboard codec and records **silence** |
+| **`sounddevice`** | ✅ **0.5.5 installed** (+ `libportaudio2`) | Not sufficient alone — the mic must be *selected* |
+| **Microphone** | ✅ **FIXED + PERSISTED 2026-07-16** | `~/.config/pulse/default.pa` pins the default source to the C270. Verified across a PulseAudio restart: `audio_rms` **0.012–0.026**, was **0.0**. See **§6 step 3** |
 | `curl` | ❌ not installed | Use `python3 -c "import requests…"` to probe the relay |
-| `torch2trt` | ❌ not installed | Needed by SPEC-05 |
-| `trt_pose` | ❌ not installed | Needed by SPEC-05 |
-| RAM | 3.9 GB total, ~3.5 GB available, **5.9 GB swap** | Not the binding constraint |
-| **Disk** | 44 GB, **37 GB used, 5.2 GB free (88%)** | ⚠️ **The binding constraint.** See §6 |
+| ~~`torch2trt` / `trt_pose`~~ | ❌ not installed, **and no longer wanted** | SPEC-05 superseded — MoveNet replaced that plan |
+| RAM | **3.9 GB** total, **5.9 GB swap** | So this is a **4 GB Nano**, despite the `jetson-2gNANO` hostname |
+| **Disk** | 44 GB, **5.2 GB free (88%)** | Was the binding constraint for SPEC-05's ~81 MB + engine build. **MoveNet cost 4.7 MB and moved it 0.0 GB** — no longer binding |
 | Camera | `/dev/video0` present, C270 @ 12.9 fps confirmed | ✅ |
-| Audio capture | C270 USB mic **confirmed present** (`alsa_input.usb-046d_C270...`) | ⚠️ works only when it is PulseAudio's default source, which **keeps reverting** — see SPEC-02 §9.3 |
 | Workshop code | `~/EDGE-CAMERA` **exists**, all edge/ + common/ deployed | ✅ Modes 1/2/3 + supervisor run on the board |
 
 > **Ignore other `~/` directories on the board** (`ultralytics`, `yolov8_models`,
@@ -73,7 +72,9 @@ Earlier docs assumed **Python 3.6**, on the general truth that JetPack 4.6 ships
 ## 3. Repository layout
 
 Organised **by machine**, so the tree teaches the topology and the deploy boundary is
-obvious: *copy `edge/` + `common/` to the Jetson* is the entire instruction.
+obvious: *copy `edge/` + `common/` + `models/` to the Jetson* is the entire instruction.
+*(`models/` joined the list with MoveNet — miss it and Mode 3 dies with
+`MoveNet model not found`.)*
 
 ```
 nvidia-workshop/
@@ -81,13 +82,13 @@ nvidia-workshop/
 │   ├── edge/            → runs on the JETSON (python3.8)
 │   │   ├── mode1_streamer.py     raw → relay
 │   │   ├── mode2_edge.py         features → relay
-│   │   ├── mode3_posture.py      posture + abnormal → relay   (SPEC-04, built)
+│   │   ├── mode3_posture.py      pose + abnormal → relay       (SPEC-04, built)
+│   │   ├── pose.py               MoveNet/TFLite keypoints      (SPEC-04, built)
 │   │   ├── behaviour.py          the fall-rule state machine   (SPEC-04, built)
 │   │   ├── supervisor.py         polls /mode, swaps clients    (SPEC-07, built)
 │   │   ├── sensor.py             webcam/mic + synthetic scene
-│   │   ├── posture.py            posture backends              (SPEC-04/05)
-│   │   ├── webcam_selftest.py
-│   │   └── posture_selftest.py
+│   │   └── webcam_selftest.py
+│   │   ⛔ posture.py / posture_selftest.py DELETED 2026-07-16 (bgsub; SPEC-04 §3.1)
 │   ├── relay/           → runs on the LAPTOP (any python)
 │   │   ├── relay_server.py       FastAPI + SSE + dashboard
 │   │   ├── bandwidth.py          byte accounting               (SPEC-02, new)
@@ -96,9 +97,13 @@ nvidia-workshop/
 │   │   ├── features.py           the model-free detector
 │   │   ├── codec.py              base64/JPEG/audio helpers
 │   │   └── config.py             thresholds + env config (was common.py)
+│   ├── models/          → deployed to the JETSON alongside edge/ + common/
+│   │   └── movenet_lightning.tflite   4.7 MB (SPEC-04). Path mirrors the board's
+│   │                                  ~/EDGE-CAMERA/models/, so pose.py's relative
+│   │                                  default resolves on BOTH machines unedited
 │   └── web/             → served by the relay
 │       ├── index.html
-│       ├── app.js
+│       ├── app.js                the chart AND the Mode 3 skeleton canvas
 │       └── vendor/elements/      vendored NVIDIA Elements UI (offline)
 ├── scripts/             → laptop provisioning (ICS setup) — NOT app code
 └── docs/
@@ -172,21 +177,36 @@ The **API key never leaves the laptop.** Devices carry a revocable token only.
 ```
 → `{"device": "bench01", "flag": "person-active", "note": null}`
 
-**Mode 3 → `/ingest_posture`** *(new — SPEC-04)*
+**Mode 3 → `/ingest_posture`** *(SPEC-04 — rewritten for MoveNet 2026-07-16)*
 ```jsonc
-{ "posture": "lying",           // standing | walking | lying | absent
+{ "posture": "lying",           // standing | walking | sitting | lying | absent
   "abnormal": true,
-  "reason": "upright→lying held 3s",
-  "torso_angle": 78.4,          // pose backends only; null for bgsub
-  "confidence": 0.91,           // pose backends only; null for bgsub
-  "backend": "trt_pose",        // bgsub | trt_pose
+  "reason": "upright→lying held 3s",   // counts up ("lying 1/3s") while building
+  "keypoints": [[0.51, 0.42, 0.9], /* …17 total… */],  // [x,y,score] 0..1, COCO order
+  "bbox": [0.14, 0.68, 0.82, 0.18],    // [x,y,w,h] normalised 0..1; null if no person
+  "score": 0.88,                       // mean confidence of trusted joints; null if none
+  "backend": "movenet",
   "context": "" }
 ```
 → `{"device": "bench01", "flag": "FALL?", "note": null}`
 
-> Mode 3 sends **only the verdict**, never keypoints or frames. The abnormal-behaviour
-> rule runs **on the Jetson** — same philosophy as Mode 2. Shipping skeletons to the
-> laptop would repeat Mode 1's mistake in a new costume.
+**Measured on hardware: 562 B.** Mode 1 is ~583,000 B — Mode 3 is **~1,037× smaller and
+carries a skeleton.** Keypoints are rounded to 3 dp on the wire (0.3 px on a 320 px frame,
+2.2× smaller than full-precision floats — see SPEC-04 §4.1).
+
+> ⚠️ **Keypoints DO travel — this reverses the original rule**, deliberately (Jeffry,
+> 2026-07-16). The old contract said "only the verdict, never keypoints", reasoning that a
+> skeleton would repeat Mode 1's mistake in a new costume. It does not: Mode 1 shipped
+> ~583 KB of recognisable **faces**; this is 17 numbers that identify nobody, and it buys
+> the live stick figure that proves the ML ran on the edge.
+>
+> **The line that still holds absolutely: RAW PIXELS NEVER TRAVEL.** No frames, no audio,
+> no JPEG — note the deliberate absence of an `image` field. Pinned by
+> `tests/test_mode3_payload.py::test_raw_pixels_never_travel`.
+>
+> **Mode 3 carries no Mode 2 fields either** — no `motion_level`, no `audio_rms`, no
+> `fall_suspected`. It is keypoints only (SPEC-04 §3.1); the two modes answer different
+> questions and blurring them into one payload would re-couple them.
 
 ### 4.4 The six-field feature vector
 
@@ -215,38 +235,91 @@ def flag_for(feats) -> str:
 
 ---
 
-## 5. The posture backend contract *(extended — SPEC-04/05)*
+## 5. The pose estimator contract *(rewritten for MoveNet — SPEC-04)*
 
-A **superset**: `bgsub` keeps satisfying the original four fields; pose backends add
-two more. The `POSTURE_BACKEND` switch your colleague built stays intact, and the
-dashboard branches on presence rather than on backend name.
+**One backend. `edge/pose.py`'s `MoveNetPose.estimate(frames) -> dict`:**
 
 ```python
 {
-  "posture": "standing" | "walking" | "lying" | "absent",
-  "bbox":    (x, y, w, h) | None,
-  "aspect":  float,            # h/w, 0.0 if no box
-  "fill":    float,            # foreground fraction 0..1
-  # --- pose backends only; None for bgsub ---
-  "keypoints":   {...} | None, # 18 COCO keypoints
-  "torso_angle": float | None, # neck→hip vector vs vertical, degrees
+  "posture":   "standing" | "walking" | "sitting" | "lying" | "absent",
+  "keypoints": [[x, y, score], ...17],  # COCO order, normalised 0..1
+  "bbox":      [x, y, w, h] | None,     # normalised 0..1, from keypoint extents
+  "score":     float,                   # mean confidence of trusted joints
 }
 ```
 
-| Backend | `bbox` | `aspect` | `fill` | `keypoints` | `torso_angle` |
-|---|---|---|---|---|---|
-| `bgsub` | ✅ | ✅ | ✅ | `None` | `None` |
-| `trt_pose` | ✅ *(from keypoint extents)* | ✅ | ✅ | ✅ | ✅ |
+- [x] **`sitting` is a real label** (new with MoveNet). Anything consuming postures must
+      handle it: `behaviour.py` counts it as UPRIGHT, and the relay maps it to
+      `person-active`. It fell through to `quiet` at first — the dashboard reported an
+      empty room with someone sitting in it.
+- [x] Downstream treats `keypoints`/`bbox`/`score` as **optional, never assumed** — an
+      `absent` second carries no skeleton.
+- [x] **`estimate()` takes a list of frames but infers only `frames[-1]`.** Its vestigial
+      `motion_level` parameter is **never read** (SPEC-04 §3.1) — leave it defaulted.
 
-- [ ] Downstream code must treat `keypoints`/`torso_angle` as **optional**, never assume.
+> **What changed and why.** This used to be a *superset* contract — `bgsub`'s four fields
+> (`bbox`/`aspect`/`fill` in pixels) plus optional `keypoints`/`torso_angle` for a future
+> pose backend. Both halves are gone: **bgsub was deleted** (it could not work without
+> Mode 2's motion detector, so it could not coexist with "Mode 3 = keypoints only"), and
+> **`torso_angle` was never built** — it belonged to SPEC-05's `trt_pose` design, which
+> MoveNet replaced. MoveNet reads posture from head-vs-hip geometry and centroid movement
+> instead, and reports `score` where the old contract said `confidence`.
+>
+> `bbox` is now **normalised 0..1**, not pixels. bgsub reported pixels; if any old code
+> passes a pixel bbox to the dashboard it will draw ~30× the frame.
 
 ---
 
-## 6. Constraints this spec imposes
+## 6. ⚠️ SD image / pre-clone checklist
 
-- [ ] **Disk is the budget.** 5.2 GB free at 88%. Every addition (torch2trt, trt_pose,
-      81 MB weights, pre-built `.engine`) comes out of it. Check `df -h /` before and
-      after each install; if it drops below ~2 GB, stop and reclaim first.
+> **Moved here from SPEC-05 §6 when that spec was deleted (2026-07-16).** It was never
+> really about TensorRT — it is the definition of the golden image every student board is
+> cloned from, which is a SPEC-01 concern. **Do not skip it: each unticked box below ships
+> broken to every student.**
+
+| # | Step | Why | State |
+|---|---|---|---|
+| 1 | `sudo rm -f /var/lib/dhcp/dhclient*.leases` | doc 09 — stale macOS leases install a dead gateway | ⏳ **at clone time** |
+| 2 | Remove the `eth0:1` stanza from `/etc/network/interfaces` | doc 09 — the dev lifeline, must not ship | ⏳ **at clone time** |
+| 3 | **Persist PulseAudio's default source → the USB webcam mic** | without it every board boots with a SILENT mic | ✅ **DONE** |
+| 4 | `sounddevice` + `libportaudio2` installed | Modes 1/2 need audio | ✅ done |
+| 5 | `models/movenet_lightning.tflite` on the board (4.7 MB) | Mode 3 dies with `MoveNet model not found` | ✅ done |
+| 6 | Deploy `src/edge/` + `src/common/` + `src/models/` | §3 | ✅ done |
+| 7 | Verify `python3` → **3.8** survives the clone | §2 — the whole layout rests on it | ⏳ **at clone time** |
+| 8 | `df -h /` after everything | §2 | ✅ 5.2 GB free, unmoved |
+
+- [x] Steps 1–2 are **deliberately deferred**: `eth0:1` is the lifeline for reaching the
+      Jetson when internet sharing is off. Do them **only** at clone time.
+- [x] **Step 3 — done and verified 2026-07-16.** `pactl set-default-source` is
+      runtime-only, so it was baked into config instead:
+
+      ```bash
+      # ~/.config/pulse/default.pa (on the Jetson)
+      .include /etc/pulse/default.pa
+      set-default-source alsa_input.usb-046d_C270_HD_WEBCAM_200901010001-02.analog-mono
+      ```
+
+      Verified by **restarting the PulseAudio daemon** (so config, not a command, set it)
+      and then **asserting on real captured audio** — the whole history of this bug is that
+      a dead mic *looks* healthy: `audio_rms` went **0.0 → 0.012–0.026**, and
+      `LOUD_RMS_THRESH` (0.05) sits ~2× above that floor. Modes 1/2 can now fire
+      `fall_suspected` at all; previously it was impossible, silently.
+- [ ] ⚠️ **Untested: a full reboot.** The daemon restart proves the config is read at
+      daemon start, and a boot starts the daemon the same way — but that is inference, and
+      this bug's history is *exactly* that assumptions about it were wrong.
+- [ ] ⚠️ **The source name embeds the webcam's serial** (`…200901010001…`). Logitech reuses
+      that string across many C270s so it will *probably* match every board — but one that
+      enumerates differently **boots deaf again with no error**, which is the exact failure
+      being fixed. Verify per board, or replace the line with a login-time script that
+      pattern-matches `usb.*C270`.
+
+---
+
+## 7. Constraints this spec imposes
+
+- [x] ~~**Disk is the budget**~~ — it was, while SPEC-05 planned ~81 MB of weights plus a
+      TensorRT engine build against 5.2 GB free. **MoveNet cost 4.7 MB and moved disk by
+      0.0 GB**, so disk no longer binds. Still worth `df -h /` before any future install.
 - [ ] **`common/` stays import-light** (§3).
 - [ ] **No credentials in the repo.** The dev board uses a default password over a
       point-to-point ICS link; it must not appear in any tracked file.
@@ -254,10 +327,9 @@ dashboard branches on presence rather than on backend name.
 
 ---
 
-## 7. Open
+## 8. Open
 
-- [x] ~~Does the USB webcam expose a mic?~~ **Yes** — Logitech C270, index 11. But the
-      system default records silence; `AUDIO_DEVICE` must be set. See SPEC-02 §9.3.
-- [ ] Select the mic **by name** (`"C270"`) rather than index `11` — the index depends on
-      enumeration order and may differ on a student board. Do this before cloning.
-- [ ] Confirm 5.2 GB is enough for SPEC-05's full install (measure, don't guess).
+- [x] ~~Does the USB webcam expose a mic?~~ **Yes** — Logitech C270. The system default
+      recorded silence; **fixed and persisted 2026-07-16** (§6 step 3).
+- [x] ~~Select the mic **by name** rather than index~~ — done: `AUDIO_DEVICE` is left unset
+      and PulseAudio's default source is pinned by name in config (§6 step 3).
