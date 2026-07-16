@@ -83,14 +83,87 @@ model-free-method lessons (**threshold fragility**, **multimodal fusion**).
 
 ## New components to build (on the laptop-relay)
 
-1. **Web dashboard (HTML/JS)** — served by `relay_server.py`, shows per second:
-   motion / loud / fall flag + (when present) the caregiver note.
+1. **Web dashboard (HTML/JS)** — served by `relay_server.py`. Layout decided below.
 2. **Live-update channel — SSE.** One-way relay→browser; FastAPI serves it with
    `StreamingResponse`; the browser uses `EventSource`.
 3. The relay already computes the flag on ingest; the dashboard just needs the relay
    to push each result to connected browsers (keep a "latest result" + fan-out).
 
 `features.py` (the detector) and the escalation design are unchanged.
+
+## Dashboard design (decided with Jeffry, 2026-07-16)
+
+Both modes converge on the **same six fields per second** — `motion_level`,
+`n_blobs`, `motion_flag`, `audio_rms`, `loud_flag`, `fall_suspected` (`features.py`).
+One layout therefore serves both; only the *provenance* differs (Jetson-computed in
+Mode 2, laptop-computed in Mode 1). The dashboard makes that provenance visible.
+
+### Layout: split — status on top, the lesson below
+
+```
+┌─ STATUS ──────────────────────┐
+│  ● person-active              │   live flag: quiet / person-active / FALL?
+│  motion ▓▓▓▓▓░░░░░  0.34      │
+│  audio  ▓▓░░░░░░░░  0.08      │
+│  blobs: 2      fall: —        │
+├─ THE LESSON ──────────────────┤
+│  MODE 1   1.42 MB/s           │
+│  MODE 2   2.1  KB/s           │
+│  ratio      676× ▲            │   ← the ~689× teaching moment, live
+└───────────────────────────────┘
+```
+
+### The video panel IS the privacy lesson
+
+Show the live frames — because **the panel's emptiness in Mode 2 is the point.**
+In Mode 1 the relay *has* the JPEGs (it must decode them to run `features.py`), so it
+can display faces. In Mode 2 it **physically cannot** — no image ever crossed the LAN,
+only a feature vector. The same panel going blank on a mode switch turns "faces leave
+the room" from a claim into something the student watches happen.
+
+```
+MODE 1                MODE 2
+┌────────────┐        ┌────────────┐
+│  [ face ]  │        │  ␀         │
+│  visible   │        │  no image  │
+│  on relay  │        │  ever sent │
+└────────────┘        └────────────┘
+  ↑ privacy exposed     ↑ private
+```
+
+### History: rolling 60s chart + fall event log
+
+A sparkline of motion/audio over the last minute, plus a timestamped event log.
+The chart is what makes the **pull-the-network** demo legible: Mode 1's trace flatlines
+and the lost seconds never return; Mode 2 buffers and **backfills** when the cable is
+reconnected. Without a time axis a dropped second just flickers past unnoticed.
+
+### Mode comparison: one mode live, both totals persist
+
+Students run **one mode at a time** (one Jetson, one camera — no second sender, no
+extra bench cost). The dashboard shows the live mode but **retains each mode's
+cumulative byte total**, so switching Mode 1 → Mode 2 makes the ratio appear on screen.
+
+```
+LIVE: ▶ MODE 2
+           bytes sent   last seen
+MODE 1     84.2 MB      13:58
+MODE 2     126 KB       ▶ now
+           ─────────────────────
+           ratio 668×
+```
+
+### Relay gaps this design exposes (must be built)
+
+Reading the boss's `relay_server.py` against the layout above surfaces two real gaps:
+
+1. **No payload accounting anywhere.** Neither `/ingest_raw` nor `/ingest_features`
+   records how many bytes arrived, so **the 689× counter has nothing to feed it.**
+   Needs a per-device, per-mode byte tally + a rate (bytes/sec) and cumulative total.
+2. **`/ingest_raw` never computes the `flag` string.** It returns `cloud_features`
+   only; the `"FALL?" / "person-active" / "quiet"` mapping lives solely in
+   `/ingest_features`. For one dashboard to serve both modes, **lift that mapping into
+   a shared helper** both endpoints call — otherwise Mode 1 has no flag to display.
 
 ## Build & test sequence (confirmed with the user)
 
@@ -113,7 +186,18 @@ the pipeline runs; the boss-faithful classroom setup is edge + separate relay ab
 
 ## Still open / next
 
-- **Interpreter provider** (Claude vs NVIDIA free tier) — pending the lab's
-  Console-API-access check (`05`).
-- **Dashboard content/design** — what to show (current second? fall-event log + note?).
-- **Multi-bench networking** — switch/router layout for a whole class (later).
+Priorities set by Jeffry on 2026-07-16:
+
+- **TOP PRIORITY — get Mode 1 and Mode 2 onto the web dashboard.** Everything below
+  is subordinate to this.
+- **Dashboard content/design** — ✅ decided 2026-07-16, see *Dashboard design* above.
+  Remaining sub-questions: video transport (SSE-inline vs MJPEG endpoint), byte-total
+  reset/scoping, and whether the 60s history buffer lives server-side.
+
+### Deferred / dropped
+
+- **Interpreter provider** (Claude vs NVIDIA free tier, `05`) — **deferred, lowest
+  priority.** The LLM escalation note is the last thing to build, so the
+  Console-API-access check is no longer a blocker for anything on the critical path.
+- **Multi-bench networking** (switch/router for a whole class) — **dropped.** A single
+  Jetson↔laptop cable per bench is the design; no class-wide network layout is planned.

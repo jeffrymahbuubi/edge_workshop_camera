@@ -45,7 +45,7 @@ references/nvidia-jetson/
 # a Jetson Nano 4GB *voice* assistant, useful as house style. It is a nested git
 # clone with its own .git, so committing it would leave a broken gitlink. It is
 # reference only and does not bind this project's design — see
-# docs/01-design/06-jetson-allinone-web-dashboard.md.
+# docs/01-design/06-deployment-topology-edge-relay.md.
 references/edge_voice_assistant/
 
 # Editor / OS

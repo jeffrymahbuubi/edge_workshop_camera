@@ -29,7 +29,21 @@ Read at a desk. No hardware needed.
 | [`03-ultimate-goal-jetson.md`](01-design/03-ultimate-goal-jetson.md) | **The goal**: run this workshop on Jetson Nano 4GB. Candidate hardware roles for the Jetson (undecided — trade-offs documented), conceptual porting concerns, and the open questions to resolve on-device. |
 | [`04-mode2-llm-interpretation.md`](01-design/04-mode2-llm-interpretation.md) | The Mode 2 + hosted-LLM step: confirmed constraints (original Nano 4GB → no local LLM; hybrid connectivity → graceful degradation) and hosted-LLM options. *Extended by `05`.* |
 | [`05-hybrid-escalation-architecture.md`](01-design/05-hybrid-escalation-architecture.md) | **Confirmed architecture**: hybrid escalation — Mode 2 always-on base + upload the raw clip *only on a suspected fall* to a cloud interpreter. Answers "what's the Jetson's role" (smart first-pass gate) and proposes the cloud-interpreter options (VLM; Claude leading, NVIDIA free-tier fallback). |
-| [`06-jetson-allinone-web-dashboard.md`](01-design/06-jetson-allinone-web-dashboard.md) | **Confirmed deployment topology (boss-faithful)**: **Jetson = edge / sensing node, laptop = cloud/relay + web dashboard**, real LAN hop between them (Role A). Revised away from an earlier all-in-one draft. Lists the boss's target metrics (bandwidth, privacy, resilience) and the new SSE dashboard. *The filename is a leftover from the superseded all-in-one draft — the body overrides it.* |
+| [`06-deployment-topology-edge-relay.md`](01-design/06-deployment-topology-edge-relay.md) | **Confirmed deployment topology (boss-faithful)**: **Jetson = edge / sensing node, laptop = cloud/relay + web dashboard**, real LAN hop between them (Role A). Revised away from an earlier all-in-one draft. Lists the boss's target metrics (bandwidth, privacy, resilience) and the new SSE dashboard. |
+
+### [`specs/`](specs) — build from these
+
+**Live implementation guides.** Written 2026-07-16, grounded in a live probe of
+`jetson-2gNANO`. Tick the checkboxes as you build; when a decision changes, change it in
+the spec *first*. `SPEC-01` is the contract — if any spec contradicts it, `SPEC-01` wins.
+
+| File | What it gives you |
+|---|---|
+| [`SPEC-01-layout-and-contracts.md`](specs/SPEC-01-layout-and-contracts.md) | **Read first.** Verified platform facts (**python3 is 3.8, not 3.6**; PyTorch already installed; **disk at 88% is the real constraint**), the `src/` layout by machine, and the normative edge↔relay HTTP contract. |
+| [`SPEC-02-relay-and-edge.md`](specs/SPEC-02-relay-and-edge.md) | 🔴 **Top priority.** Modes 1+2 → dashboard. Byte accounting (the 689× counter has no data source today), the shared flag helper, SSE, `/latest.jpg`, ring buffer. **Includes hardware-validated results** — the real ratio is **~2,395×, not 689×** — and two confirmed blockers. |
+| [`SPEC-03-web-dashboard.md`](specs/SPEC-03-web-dashboard.md) | The browser: split status/lesson layout, the video panel (whose *emptiness* in Mode 2 is the privacy lesson), 60 s chart, event log, offline-only assets. |
+| [`SPEC-04-mode3-posture.md`](specs/SPEC-04-mode3-posture.md) | Mode 3: the posture signal + the fall rule (*upright → lying, held N s*). **Explains why `bgsub` fails that rule** — a fallen person fades into the background in ~8 s, which is exactly the state the rule needs held. |
+| [`SPEC-05-tensorrt-backend.md`](specs/SPEC-05-tensorrt-backend.md) | Designs the `trt_pose` backend that **does not exist yet** (`posture.py`'s `trt` is a stub). Why pose beats detection here, the offline model/engine problem, and the SD-image pre-clone steps. |
 
 ### [`02-hardware/`](02-hardware) — at the bench, Jetson in hand
 
@@ -50,7 +64,7 @@ About the machines we *build* on, not the ones we ship.
 
 | File | What it gives you |
 |---|---|
-| [`11-nvidia-tooling-and-skills-findings.md`](03-tooling/11-nvidia-tooling-and-skills-findings.md) | **What upstream NVIDIA tooling is worth using — and what bricks a Nano.** Of four repos in `references/nvidia-jetson/`, only **Elements** ships an MCP server (now wired into `.mcp.json`, and its UI bundle vendored offline to `static/vendor/elements/` — proven offline-safe in a real browser). Of the Jetson Agent Skills, only **3 of 6 are safe on a Nano 4GB**: they all assume Orin/Thor, so a **t210 reports `sku=unknown`**. **🛑 `jetson-optimize-memory` can brick the board** — it edits t234-only BCT carveouts and its only guard is prose. Read this before installing any NVIDIA skill, or before touching `.mcp.json`. |
+| [`11-nvidia-tooling-and-skills-findings.md`](03-tooling/11-nvidia-tooling-and-skills-findings.md) | **What upstream NVIDIA tooling is worth using — and what bricks a Nano.** Of four repos in `references/nvidia-jetson/`, only **Elements** ships an MCP server (now wired into `.mcp.json`, and its UI bundle vendored offline to `src/web/vendor/elements/` — proven offline-safe in a real browser). Of the Jetson Agent Skills, only **3 of 6 are safe on a Nano 4GB**: they all assume Orin/Thor, so a **t210 reports `sku=unknown`**. **🛑 `jetson-optimize-memory` can brick the board** — it edits t234-only BCT carveouts and its only guard is prose. Read this before installing any NVIDIA skill, or before touching `.mcp.json`. |
 
 ## One-paragraph summary (if you read nothing else)
 

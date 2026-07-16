@@ -94,14 +94,14 @@ npx -y @nvidia-elements/cli@2.1.4 api.template.validate '<nve-badge status="dang
 
 ## 2. Elements for the dashboard — vendored and proven offline
 
-Per [`06`](../01-design/06-jetson-allinone-web-dashboard.md), the dashboard is served by
+Per [`06`](../01-design/06-deployment-topology-edge-relay.md), the dashboard is served by
 **`relay_server.py` on the student laptop** (FastAPI), *not* the Jetson. So the
 Nano's 4GB never touches these assets, and the LAN cable isn't in the asset path.
 
 ### Why vendor now
 
 The workshop LAN has **no internet**. There is no recovery path on the morning.
-Assets are committed at **`static/vendor/elements/`**:
+Assets are committed at **`src/web/vendor/elements/`**:
 
 | File | Source package (npm) | Raw | Gzipped |
 |---|---|---|---|
@@ -150,12 +150,12 @@ from an inlined registry.
 
 ### Proof it works
 
-`static/vendor/elements/smoke-test.html` renders the dashboard-relevant
+`src/web/vendor/elements/smoke-test.html` renders the dashboard-relevant
 components. It must be served over HTTP — **ES modules are blocked on
 `file://`**. Per project convention, drive Python with **`uv`**:
 
 ```bash
-cd static/vendor/elements
+cd src/web/vendor/elements
 uv run python -m http.server 8080
 # open http://localhost:8080/smoke-test.html  → expect a green PASS banner
 ```
@@ -286,7 +286,7 @@ diagnostic's reporting guidance, and `optimize-memory`'s entire design.
 2. **`jetson-diagnostic` + `jetson-memory-audit`** — decent before/after evidence
    when tuning, *if* you accept the `unknown` fields.
 
-Under [`06`](../01-design/06-jetson-allinone-web-dashboard.md)'s locked topology the Jetson
+Under [`06`](../01-design/06-deployment-topology-edge-relay.md)'s locked topology the Jetson
 serves no dashboard, so none of this is on the critical path. **UNVERIFIED**: no
 skill here has been run on the actual dev Nano (`jetson-2gNANO`) — the verdicts
 above are from reading the shipped source, not from execution.
@@ -311,7 +311,7 @@ upstream tooling reduces it.
 | Path | Status |
 |---|---|
 | `.mcp.json` | `elements` server added. **Git-ignored** — on-disk only, by design |
-| `static/vendor/elements/` | **New.** 6 vendored files + `smoke-test.html`. Committed on purpose: the workshop LAN has no internet |
+| `src/web/vendor/elements/` | **New.** 6 vendored files + `smoke-test.html`. Committed on purpose: the workshop LAN has no internet |
 | `docs/03-tooling/11-…` (this file) | New |
 
 Nothing under `references/` was modified. `references/nvidia-jetson/` stays
