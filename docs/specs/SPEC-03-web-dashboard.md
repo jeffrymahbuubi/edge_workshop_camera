@@ -171,11 +171,14 @@ MODE 2     126 KB       ▶ now
       **`ratio: 2352.9` → renders as `2,353×`**, `posture: null` (guarded) ✅
 - [x] **`/latest.jpg` → 404 after switching to Mode 2** — the privacy panel blanks ✅
 
-### ⚠️ Outstanding — the browser pass (next phase: playwright-cli)
+### The browser pass — RUN 2026-07-16 (playwright-cli, synthetic sensor): **8/10 pass**
 
-**None of this is verified.** The data path is proven; the **rendering has never been
-loaded in a browser**. No screenshot tooling was available in the build session, so these
-are honest unknowns, not assumed passes.
+The two cable-pull checks need someone at the bench with the Jetson and are **not run**.
+Everything else below is verified in a real browser. Two rendering bugs found on the
+*first* load (2026-07-16, earlier session) are **still open** and are Jeffry's to fix:
+the `#fall-alert` banner shows on page load with no data (`index.html:111` has no initial
+hidden state), and the page loads light despite `nve-theme="dark inter"` — see the note
+under *Both light and dark themes* for the root cause of the second.
 
 #### How to bring it up
 
@@ -197,24 +200,65 @@ cd src && uv run --with fastapi --with "uvicorn[standard]" --with opencv-python 
 
 #### The checks
 
-- [ ] **Does it render at all** — layout, Elements components upgrading (`nve-badge`,
+- [x] **Does it render at all** — layout, Elements components upgrading (`nve-badge`,
       `nve-dot`, `nve-alert`, `nve-button`), Inter font loading.
-- [ ] **Zero network requests leave the machine.** Assert this in Playwright by failing
+      *(All 4 `customElements.get()` → defined, each with a `shadowRoot`;
+      `document.fonts.check('12px Inter')` → true.)*
+- [x] **Zero network requests leave the machine.** Assert this in Playwright by failing
       on any request whose URL is not same-origin — the strongest version of the offline
       guarantee, and the one static analysis can't give. `vendor/elements/smoke-test.html`
       already demonstrates the `window.fetch` interception trick.
-- [ ] Video panel shows the frame in Mode 1 and **blanks** on the switch to Mode 2.
+      *(**5,537 requests across two browsers, every one `127.0.0.1:8000`.** `playwright-cli
+      requests` lists them all — no interception trick needed.)*
+- [x] Video panel shows the frame in Mode 1 and **blanks** on the switch to Mode 2.
       **If a face survives into Mode 2 that is a bug, not a glitch** — see SPEC-02 §7.
-- [ ] Ratio reads `—` with only one mode seen, then a number once both have sent.
-- [ ] Refresh mid-demo → chart repopulates from the ring buffer (not blank).
-- [ ] **Two browsers at once** → both update. Catches the SSE fan-out bug (SPEC-02 §5) —
+      *(Frame shown in Mode 1 → on switch, `/latest.jpg` 404s and the panel reads "Mode 2
+      sent no image — only a feature vector". No face survived.)*
+- [x] Ratio reads `—` with only one mode seen, then a number once both have sent.
+      *(Held `—` through a Mode-1-only run, then read `996×`.)*
+- [x] Refresh mid-demo → chart repopulates from the ring buffer (not blank).
+      *(Chart path 627 chars + 20 log rows after reload; totals retained.)*
+- [x] **Two browsers at once** → both update. Catches the SSE fan-out bug (SPEC-02 §5) —
       a single shared generator would deadlock the second client.
-- [ ] Pull the cable in Mode 1 → gap in the chart, connection badge turns red/"relay
-      unreachable".
+      *(Both advanced together: 12.1→14.1 KB and 12.5→14.4 KB. No deadlock.)*
+- [ ] Pull the cable in Mode 1 → gap in the chart. **Needs the bench.**
+
+      > ⚠️ **This check used to say "connection badge turns red" — that was wrong.**
+      > `#conn` tracks the **browser→relay** `EventSource` (`app.js:215 es.onerror`), not
+      > the Jetson→relay link. The relay and the dashboard both run on the laptop, so
+      > pulling the Jetson's cable gaps the chart and leaves the badge **green**. Do not
+      > report that as a failure. The badge only goes red if the **relay** dies — verified
+      > separately by routing `/events`→500: it reads "relay unreachable — retrying".
+      > *(Auto-recovery is still unverified: per WHATWG, `EventSource` fails **permanently**
+      > on an HTTP error status and only auto-retries on a true connection error, so a
+      > routed 500 cannot test it.)*
 - [ ] Pull the cable in Mode 2 → gap, then **backfill** on reconnect, drawn at the
-      correct *timestamps* rather than bunched at "now".
-- [ ] Both **light and dark** themes — toggle in the header, persisted to `localStorage`.
-- [ ] Reset button clears totals, chart and log.
+      correct *timestamps* rather than bunched at "now". **Needs the bench.**
+- [x] Both **light and dark** themes — toggle in the header, persisted to `localStorage`.
+      *(Toggle works and persists. **Both open theme bugs root-caused:** the page loads
+      light because `app.js:240` calls `applyTheme(localStorage ?? prefers-color-scheme)`,
+      overwriting the `dark inter` in `index.html:101` — that attribute is dead. And dark
+      renders **dark-on-dark** because `nve-theme` sits on `<body>`, one level too low:
+      themes.css declares `--nve-sys-layer-canvas-color: var(--nve-sys-text-color)` at
+      `:root`, where the attribute is absent, so it resolves against light's 20% text and
+      `body` inherits that already-resolved value — while `background` flips correctly
+      because it is declared inside the theme blocks, which do match `body`.
+      **Fix: move `nve-theme` to `<html>`** (`index.html:101` + `app.js:233` →
+      `document.documentElement`); tested live, renders perfectly.)*
+- [x] Reset button clears totals, chart and log.
+      *(`m1`/`ratio` → `—`, log 20→4, chart cleared.)*
+
+> **Console noise.** The only console errors are the by-design `/latest.jpg` 404s — 187 in
+> one run, ~5/sec while no frame exists. No JS errors at all. The 404 *is* the privacy
+> lesson (SPEC-02 §7), but the volume will bury a real error during the workshop.
+
+> ⚠️ **Environment trap that will waste your afternoon.** A relay left running from an
+> earlier session can hold `0.0.0.0:8000` while a new one binds `127.0.0.1:8000`.
+> Localhost prefers the **specific** bind, so stray clients from other sessions land on
+> *your* relay — this produced a phantom Mode 2 total and a bogus `858×` ratio that looked
+> exactly like a relay bug — and killing your relay silently hands the port to the stale
+> one, so the badge never goes red. **`POST /reset` before trusting any number**, and
+> check `netstat -ano | grep :8000` for more than one listener.
 
 > **Playwright note.** The page is entirely SSE- and timer-driven; there is no
 > "load complete" moment to await. Wait on **content** (e.g. `#ratio` not being `—`)
@@ -251,4 +295,7 @@ Decisions taken while building, worth knowing before you change something:
 - [ ] The caregiver `note` field is **not rendered** — always `null` while the LLM is
       deferred to last priority. Add when the interpreter lands.
 - [ ] Posture is a single line (`posture` + `torso_angle`). SPEC-04 may want the
-      timeline + alarm-banner treatment.
+      timeline + alarm-banner treatment. *(SPEC-04 built and shipped against this panel
+      unchanged — verified live: posture read `lying (78°)`, the alarm banner carried the
+      rule's `reason`. The pose-backend `torso_angle` path already renders, so SPEC-05
+      needs no dashboard work either. A timeline is still open.)*
