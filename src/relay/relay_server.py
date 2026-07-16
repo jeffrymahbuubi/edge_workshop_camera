@@ -31,6 +31,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from common.codec import decode_frame, decode_audio
+from common.config import LOUD_RMS_THRESH, MOTION_LEVEL_THRESH
 from common.features import extract_features
 from relay.bandwidth import BandwidthTracker
 
@@ -51,6 +52,18 @@ RATE_LIMIT, WINDOW_S = 300, 60
 
 # remember each device's last motion state, for the fusion rule in Mode 1
 _last_motion = defaultdict(bool)
+
+# Live-tunable fall thresholds (SPEC-06). Seeded from the boss's reference
+# constants, adjustable at runtime from the dashboard. Mode 1 (features computed
+# here) applies them directly; Mode 2 pulls them back in each ingest response and
+# applies them ON THE EDGE next tick, so the Jetson stays the one computing the
+# fusion -- only the numbers are fed from the dashboard.
+_live_cfg = {
+    "loud_rms_thresh": LOUD_RMS_THRESH,
+    "motion_level_thresh": MOTION_LEVEL_THRESH,
+}
+# Sane bounds so a stray slider value can't wedge the demo.
+_CFG_BOUNDS = {"loud_rms_thresh": (0.0, 1.0), "motion_level_thresh": (0.0, 1.0)}
 
 LLM_MODEL = os.environ.get("LLM_MODEL", "claude-sonnet-5")
 
@@ -159,6 +172,13 @@ class PosturePayload(BaseModel):
     context: str = ""
 
 
+class ConfigPatch(BaseModel):
+    """Live fall-threshold tweak from the dashboard (SPEC-06). Both optional so a
+    slider can move one knob without touching the other."""
+    loud_rms_thresh: Optional[float] = None
+    motion_level_thresh: Optional[float] = None
+
+
 @app.get("/health")
 def health():
     return {"ok": True}
@@ -189,7 +209,11 @@ async def ingest_raw(batch: RawBatch, request: Request,
     def work():
         frames = [decode_frame(b) for b in batch.frames]
         audio = decode_audio(batch.audio)
-        feats = extract_features(frames, audio, _last_motion[device])
+        # Mode 1's fusion runs HERE, so the live thresholds apply immediately --
+        # no round-trip to the edge (the edge sent raw pixels, not a verdict).
+        feats = extract_features(frames, audio, _last_motion[device],
+                                 motion_level_thresh=_live_cfg["motion_level_thresh"],
+                                 loud_rms_thresh=_live_cfg["loud_rms_thresh"])
         _last_motion[device] = feats["motion_flag"]
         return len(frames), feats
 
@@ -223,7 +247,11 @@ async def ingest_features(f: FeaturePayload, request: Request,
     feats = f.dict()
     flag = flag_for(feats)
     await _publish(_event(device, 2, flag, feats=feats))
-    return {"device": device, "flag": flag, "note": _maybe_llm_note(f)}
+    # Hand the live thresholds back so the edge applies them next tick. This is
+    # what keeps the FUSION on the Jetson (the boss's design) while the numbers
+    # are tuned from the dashboard.
+    return {"device": device, "flag": flag, "note": _maybe_llm_note(f),
+            "config": dict(_live_cfg)}
 
 
 @app.post("/ingest_posture")
@@ -260,6 +288,24 @@ def latest_jpg(device: str = "bench01"):
         raise HTTPException(404, "no frame -- this mode sends no image")
     return Response(content=jpeg, media_type="image/jpeg",
                     headers={"Cache-Control": "no-store"})
+
+
+@app.get("/config")
+def get_config():
+    """Current live fall thresholds -- the dashboard reads this to seed sliders."""
+    return dict(_live_cfg)
+
+
+@app.post("/config")
+def set_config(patch: ConfigPatch):
+    """Update a live fall threshold (SPEC-06). Ignores omitted fields; clamps to
+    sane bounds so a bad slider value can't wedge the demo. Mode 1 picks it up on
+    the next frame; Mode 2's edge on its next tick."""
+    updates = patch.dict(exclude_none=True)
+    for k, v in updates.items():
+        lo, hi = _CFG_BOUNDS[k]
+        _live_cfg[k] = max(lo, min(hi, float(v)))
+    return dict(_live_cfg)
 
 
 @app.post("/reset")

@@ -228,6 +228,41 @@ $("reset-btn").addEventListener("click", async () => {
   renderChart();
 });
 
+// ------------------------------------------------ live fall tuning (SPEC-06)
+// Two sliders POST the fall thresholds to the relay. Mode 1 applies them on the
+// next frame; Mode 2's edge on its next tick. The relay is the single source of
+// truth, so a fresh browser seeds its sliders from GET /config.
+const TUNERS = [
+  { slider: "loud-slider",   out: "loud-val",         key: "loud_rms_thresh",     digits: 3 },
+  { slider: "motion-slider", out: "motion-slider-val", key: "motion_level_thresh", digits: 3 },
+];
+
+async function loadTuning() {
+  try {
+    const cfg = await (await fetch("/config")).json();
+    for (const t of TUNERS) {
+      if (cfg[t.key] == null) continue;
+      $(t.slider).value = cfg[t.key];
+      $(t.out).textContent = Number(cfg[t.key]).toFixed(t.digits);
+    }
+  } catch { /* offline / not up yet -- sliders stay at their dashes */ }
+}
+
+for (const t of TUNERS) {
+  const s = $(t.slider);
+  // Label tracks the drag; POST only on release, so we don't flood the relay.
+  s.addEventListener("input", () => {
+    $(t.out).textContent = Number(s.value).toFixed(t.digits);
+  });
+  s.addEventListener("change", () => {
+    fetch("/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [t.key]: Number(s.value) }),
+    }).catch(() => {});
+  });
+}
+
 const THEME_KEY = "nv-workshop-theme";
 function applyTheme(mode) {
   document.body.setAttribute("nve-theme", `${mode} inter`);
@@ -243,6 +278,7 @@ applyTheme(
 );
 
 document.title = `Edge Sensing — ${DEVICE}`;
+loadTuning();
 connect();
 setInterval(pollFrame, FRAME_MS);
 setInterval(renderChart, 1000);   // keep the window scrolling even when idle

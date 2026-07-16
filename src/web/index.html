@@ -93,6 +93,15 @@
     .log li { display: flex; gap: .6rem; padding-block: .2rem; border-block-end: 1px solid var(--panel-line); }
     .log time { opacity: .5; font-variant-numeric: tabular-nums; }
     .log .fall { color: var(--danger); font-weight: 650; }
+
+    .tune-live { font-size: .62rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--motion); border: 1px solid var(--motion);
+      border-radius: .5rem; padding: 0 .35rem; vertical-align: middle; }
+    .tune { display: flex; flex-direction: column; gap: .2rem; margin-block: .5rem; }
+    .tune label { font-size: .8rem; display: flex; justify-content: space-between; }
+    .tune label b { font-variant-numeric: tabular-nums; }
+    .tune input[type=range] { width: 100%; accent-color: var(--motion); }
+    .tune-hint { font-size: .72rem; opacity: .7; margin: .4rem 0 0; line-height: 1.4; }
     .log .empty { opacity: .45; }
 
     .stack > * + * { margin-block-start: var(--gap); }
@@ -138,6 +147,23 @@
           <span>fall <b id="fall">—</b></span>
           <span>posture <b id="posture">—</b></span>
         </div>
+      </section>
+
+      <section class="panel">
+        <h2>Fall sensitivity <span class="tune-live">live</span></h2>
+        <div class="tune">
+          <label for="loud-slider">loud threshold <b id="loud-val">—</b></label>
+          <input type="range" id="loud-slider" min="0" max="0.2" step="0.005">
+        </div>
+        <div class="tune">
+          <label for="motion-slider">motion threshold <b id="motion-slider-val">—</b></label>
+          <input type="range" id="motion-slider" min="0" max="0.1" step="0.002">
+        </div>
+        <p class="tune-hint">
+          Lower <b>loud</b> so quieter sounds count. Raise <b>motion</b> so a small
+          movement still reads as “stopped”. Applies to Mode 1 instantly and Mode 2
+          within a second — the Jetson keeps deciding, the dashboard just feeds the numbers.
+        </p>
       </section>
 
       <section class="panel">

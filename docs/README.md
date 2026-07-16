@@ -44,6 +44,7 @@ the spec *first*. `SPEC-01` is the contract — if any spec contradicts it, `SPE
 | [`SPEC-03-web-dashboard.md`](specs/SPEC-03-web-dashboard.md) | The browser: split status/lesson layout, the video panel (whose *emptiness* in Mode 2 is the privacy lesson), 60 s chart, event log, offline-only assets. |
 | [`SPEC-04-mode3-posture.md`](specs/SPEC-04-mode3-posture.md) | Mode 3: the posture signal + the fall rule (*upright → lying, held N s*). **Explains why `bgsub` fails that rule** — a fallen person fades into the background in ~8 s, which is exactly the state the rule needs held. |
 | [`SPEC-05-tensorrt-backend.md`](specs/SPEC-05-tensorrt-backend.md) | Designs the `trt_pose` backend that **does not exist yet** (`posture.py`'s `trt` is a stub). Why pose beats detection here, the offline model/engine problem, and the SD-image pre-clone steps. |
+| [`SPEC-06-live-fall-tuning.md`](specs/SPEC-06-live-fall-tuning.md) | **Live-tunable fall thresholds for Modes 1/2** from the dashboard — two sliders POST to the relay; Mode 1 applies instantly, Mode 2's edge pulls the numbers back and applies them next tick (fusion stays on the Jetson). Solves the solo-demo problem where making the loud sound is itself motion. Built + laptop-verified 2026-07-16. |
 
 ### [`02-hardware/`](02-hardware) — at the bench, Jetson in hand
 
