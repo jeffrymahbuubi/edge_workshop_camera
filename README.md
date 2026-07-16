@@ -22,6 +22,32 @@ and you choose it, live, with three buttons on the dashboard.
 Everything is watchable in a browser at `http://127.0.0.1:8000`: the live video (or its
 pointed absence), a skeleton, the bandwidth each mode costs, and a fall alarm.
 
+![The dashboard on first load](docs/images/dashboard-first-load.png)
+
+*This is what you get after Step 3 — before the Jetson has sent anything. `connected`
+means the browser reached the relay; `waiting…` means the Jetson is not sending yet.
+**A blank dashboard at this point is correct, not broken.***
+
+---
+
+## The one picture that is the whole workshop
+
+Same camera, same room, same second. **This is what the laptop received**, in each mode:
+
+| Mode 1 — send everything | Mode 2 — send the answer | Mode 3 — send what it understood |
+|---|---|---|
+| ![Mode 1](docs/images/panel-mode1.png) | ![Mode 2](docs/images/panel-mode2.png) | ![Mode 3](docs/images/panel-mode3.png) |
+| **~583 KB every second.** The relay has the picture, because every pixel was sent to it. *In a real room, this is your face.* | **~200 B.** The panel is empty because **the relay has no image** — none was ever sent. It still knows whether someone moved. | **~611 B.** A skeleton drawn from 17 coordinates, over **nothing**. The Jetson understood the person completely; the laptop never saw them. |
+
+**Mode 2's empty panel is not a bug. It is the entire point** — and the fact that Mode 3
+can draw a moving human figure over that same emptiness is the punchline.
+
+> **About these screenshots:** they were captured with the **synthetic test scene** (the
+> default when no webcam is attached), which is why Mode 1 shows a grey field with a pale
+> square rather than a room. That square *is* the "person" the synthetic sensor moves
+> around. With a real camera on the Jetson, Mode 1's panel shows the actual room and the
+> actual faces in it — which is exactly why we did not put one in a public repository.
+
 ---
 
 ## The three modes
@@ -57,6 +83,18 @@ the three modes do it differently and the difference is the lesson:
 That is what fusion really buys: **not permission, but confidence, sooner.** A silent
 collapse still raises the alarm — which is exactly why sound must never be a *requirement*.
 Gating on sound would look tidier and would quietly stop detecting the person who faints.
+
+### …and all of the above is already on the dashboard
+
+**Instructors: you do not need slides for this.** Everything in this section is on the page
+itself, at the bottom, in both English and 繁體中文 (there is an **EN / 中文** button in the
+header). Each topic is a row you click open, so the three modes always line up side by side:
+
+![The three-mode comparison section on the dashboard](docs/images/three-modes-compare.png)
+
+The **How to trigger FALL** steps also appear *in the live panel*, following whichever mode
+is selected — so a student experimenting on their own always has the instructions next to
+the thing they are trying to change.
 
 ---
 
@@ -151,7 +189,8 @@ Go to **<http://127.0.0.1:8000>** in a browser.
 
 **Check it worked:** you see the dashboard, the badge top-right says **connected**, and the
 status reads **waiting…**. It says `waiting…` because the Jetson is not sending anything
-yet — that is correct, not broken.
+yet — that is correct, not broken. It should look
+[exactly like this](docs/images/dashboard-first-load.png).
 
 ### Step 5. Let the Jetson through your firewall
 
@@ -286,7 +325,9 @@ bound to `127.0.0.1` (Step 3). It is almost never the Jetson.
 Click **Mode 1 / Mode 2 / Mode 3** in the browser. The supervisor swaps clients within about
 two seconds. You never touch the Jetson again.
 
-**Check it worked** — watch the video panel tell the story:
+**Check it worked** — watch the video panel tell the story (this is
+[the trio at the top of this README](#the-one-picture-that-is-the-whole-workshop), now with
+your real room in it):
 
 | Click | The panel shows | Because |
 |---|---|---|
