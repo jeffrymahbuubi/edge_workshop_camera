@@ -6,9 +6,20 @@
 | | |
 |---|---|
 | **Status** | 🟡 Specified, not built. **Nothing installed yet.** |
-| **Priority** | 🟢 After SPEC-04's pipeline works on `bgsub` |
+| **Priority** | 🟢 After SPEC-04's pipeline works on `bgsub` — **now backed by measured evidence (below), not just theory** |
 | **Runs on** | The **Jetson** |
 | **Depends on** | SPEC-01 (§5 contract), SPEC-04 (the rule this feeds) |
+
+> **Measured on hardware 2026-07-16 — the case for this spec is no longer hypothetical.**
+> A first bench pass of `bgsub` Mode 3 (SPEC-04 §6) showed **`lying` never held more than
+> ~2 seconds** before MOG2 faded the still person to `absent`, while the fall rule needs it
+> held 3 s and treats `absent` as a cancel. In other words **the `bgsub` fall barely fires
+> on a real person**, and `standing` was almost never produced at all (a still upright
+> person fades before it can be labelled). The fade §1.2 predicted was not only real, it was
+> *faster* than estimated. This is the concrete failure `trt_pose` exists to fix: pose /
+> torso-angle does not fade, because it does not depend on a moving-foreground model. Get a
+> clean controlled fade number when possible, but the direction already justifies building
+> this. **Blocker for starting: the ~81 MB stack is deliberately not installed (disk 88%).**
 
 ---
 

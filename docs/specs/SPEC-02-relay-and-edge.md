@@ -338,9 +338,30 @@ pactl set-default-source alsa_input.usb-046d_C270_HD_WEBCAM_200901010001-02.anal
       Make it persistent before cloning (a `~/.config/pulse/default.pa` line or a
       systemd user unit) and add it to the pre-clone checklist in SPEC-05 §6. **Every
       student board will otherwise boot deaf.**
+- [ ] ⚠️ **WORSE than just "not persistent" — observed 2026-07-16 (second bench session):
+      the runtime `set-default-source` KEEPS REVERTING to the onboard jack across new
+      processes.** Set it, run a client, `loud` fires; start the next client (e.g. via the
+      SPEC-07 supervisor) and it is silent again with the default back on
+      `alsa_input.platform-sound.analog-stereo`. So even for a *single* live session the
+      runtime command is unreliable once you launch more than one client. **Treat the
+      persistent PulseAudio-config fix as the ONLY real fix** — do not rely on the runtime
+      command for a demo. `AUDIO_DEVICE=C270` is also flaky the same way (PortAudio
+      intermittently "cannot see cards that PulseAudio owns" and falls back to silence).
 - [ ] Retune `LOUD_RMS_THRESH` (0.05). Measured ambient ≈ **0.017–0.045** — the C270's
       gain is high. Speech reads ~0.098, so 0.05 does separate them, but the margin is
-      thin and the room will be noisy on the day.
+      thin and the room will be noisy on the day. **Now runtime-tunable from the dashboard
+      (SPEC-06)** — the slider is the fast path to separate ambient from speech live, and
+      also the workaround when the mic is silent (lower the bar onto the C270's ambient
+      self-noise to make falls fire at all).
+
+> **The Mode 1/2 fall is also hard to trigger for a reason no threshold fixes alone**
+> (measured 2026-07-16): the fall rule needs `loud AND motion-just-stopped` in one second,
+> but **making the loud sound is itself motion** (a clap/shout registers as movement), so
+> `motion` rarely reads "stopped" in the loud second — `loud` fired twice, both times with
+> `motion=True`, so the fall never fired. The fixes are physical (make the noise off-frame:
+> stomp, off-camera knock) or via **SPEC-06 tuning** (raise the motion threshold so a small
+> residual movement counts as "stopped", and/or lower the loud threshold). This coupling is
+> the whole motivation for SPEC-06.
 
 ### 9.4 ✅ RESOLVED — `MOTION_LEVEL_THRESH` is fine; the earlier reading was real motion
 

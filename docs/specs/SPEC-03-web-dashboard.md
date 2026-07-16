@@ -6,10 +6,18 @@
 
 | | |
 |---|---|
-| **Status** | 🟢 **Built** (2026-07-16) — data path validated against the real Jetson. ⚠️ **Visual rendering not yet verified in a browser** (§7). |
+| **Status** | 🟢 **Built + verified in a real browser** (2026-07-16, playwright-cli — §7, 8/10 checks; the 2 open are cable-pull, bench-only). **Since extended** with the SPEC-06 fall-sensitivity sliders and the SPEC-07 Mode 1/2/3 buttons — both browser-verified live against the Jetson. |
 | **Priority** | 🔴 **TOP** (with SPEC-02) |
 | **Runs on** | The **student laptop**, served by `relay_server.py`. Never the Jetson. |
 | **Depends on** | SPEC-02 (`/events`, `/latest.jpg`, `/reset`) — ✅ all built |
+
+> **The dashboard now carries three control clusters, not just readouts:** the header
+> **Mode 1/2/3 buttons** (SPEC-07, drive `/mode`), the **Fall sensitivity** panel with two
+> sliders (SPEC-06, drive `/config`), and the original reset/theme controls. New element ids
+> since the §7 audit: `mode1-btn`/`mode2-btn`/`mode3-btn`, `loud-slider`/`loud-val`,
+> `motion-slider`/`motion-slider-val`. Two open rendering bugs from the first browser load
+> (fall banner on load; theme loads light) are **still Jeffry's to fix** — see §7 for the
+> root causes.
 
 **Built:** `src/web/index.html` + `src/web/app.js`, served by the relay at `GET /`
 (`/app.js`, and `/vendor/*` mounted via `StaticFiles`). Open

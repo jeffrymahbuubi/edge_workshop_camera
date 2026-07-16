@@ -38,9 +38,9 @@ not assumptions — several overturned what the docs previously assumed.
 | `trt_pose` | ❌ not installed | Needed by SPEC-05 |
 | RAM | 3.9 GB total, ~3.5 GB available, **5.9 GB swap** | Not the binding constraint |
 | **Disk** | 44 GB, **37 GB used, 5.2 GB free (88%)** | ⚠️ **The binding constraint.** See §6 |
-| Camera | `/dev/video0` present | ✅ |
-| Audio capture | `tegrasndt210ref` (onboard) | USB-webcam mic not yet confirmed |
-| Workshop code | `~/EDGE-CAMERA` does **not** exist | Nothing deployed yet |
+| Camera | `/dev/video0` present, C270 @ 12.9 fps confirmed | ✅ |
+| Audio capture | C270 USB mic **confirmed present** (`alsa_input.usb-046d_C270...`) | ⚠️ works only when it is PulseAudio's default source, which **keeps reverting** — see SPEC-02 §9.3 |
+| Workshop code | `~/EDGE-CAMERA` **exists**, all edge/ + common/ deployed | ✅ Modes 1/2/3 + supervisor run on the board |
 
 > **Ignore other `~/` directories on the board** (`ultralytics`, `yolov8_models`,
 > `python_apriltag_yolo`, `CAVEDU_jetson_inference`, …). Confirmed by Jeffry as
@@ -81,7 +81,9 @@ nvidia-workshop/
 │   ├── edge/            → runs on the JETSON (python3.8)
 │   │   ├── mode1_streamer.py     raw → relay
 │   │   ├── mode2_edge.py         features → relay
-│   │   ├── mode3_posture.py      posture + abnormal → relay   (SPEC-04, new)
+│   │   ├── mode3_posture.py      posture + abnormal → relay   (SPEC-04, built)
+│   │   ├── behaviour.py          the fall-rule state machine   (SPEC-04, built)
+│   │   ├── supervisor.py         polls /mode, swaps clients    (SPEC-07, built)
 │   │   ├── sensor.py             webcam/mic + synthetic scene
 │   │   ├── posture.py            posture backends              (SPEC-04/05)
 │   │   ├── webcam_selftest.py
@@ -109,8 +111,9 @@ nvidia-workshop/
 - [x] Imports are package-qualified: `from common.features import extract_features`. ✅
 - [x] `src/web/vendor/elements/` in place (moved from `static/`); `index.html` + `app.js`
       built (SPEC-03). ✅
-- [ ] `edge/mode3_posture.py` — the only file in this tree that does not exist yet
-      (SPEC-04).
+- [x] `edge/mode3_posture.py` — built (SPEC-04). Also added since: `edge/behaviour.py`
+      (SPEC-04 fall rule) and `edge/supervisor.py` (SPEC-07 mode switch). **The entire
+      `src/` tree now exists**; nothing in SPEC-01's layout is unbuilt.
 
 ---
 
@@ -140,8 +143,16 @@ The **API key never leaves the laptop.** Devices carry a revocable token only.
 | `GET` | `/events` | — | SSE stream → browser — ✅ **built** |
 | `GET` | `/latest.jpg` | 1 only | most recent frame — ✅ **built** (404 in Modes 2/3, by design) |
 | `POST` | `/reset` | — | clear byte totals — ✅ **built** |
+| `GET`/`POST` | `/config` | 1,2 | live fall thresholds `{loud_rms_thresh, motion_level_thresh}` — ✅ **built** *(SPEC-06)*. Mode 1 applies on the relay; Mode 2's edge pulls it from the `/ingest_features` response and applies next tick |
+| `GET`/`POST` | `/mode` | — | selected mode `{mode: 1\|2\|3\|null}` — ✅ **built** *(SPEC-07)*. The Jetson supervisor polls `GET`; the dashboard buttons `POST`. `null` = all stopped |
 | `GET` | `/health` | — | `{"ok": true}` |
 | `GET` | `/` | — | the dashboard *(new, SPEC-03)* |
+
+> **Two runtime-control endpoints added this session (SPEC-06/07).** Both follow the same
+> pattern: the relay holds state, the Jetson polls it — no inbound connection to the board,
+> so they cross the firewall/NAT exactly like the ingest path. Mode 1/2's fall thresholds
+> are therefore no longer fixed constants; they are seeded from `config.py` and overridable
+> live. Defaults unchanged, so the boss's reference behaviour is intact unless a slider moves.
 
 ### 4.3 Payloads
 

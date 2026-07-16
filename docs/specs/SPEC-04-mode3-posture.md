@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Status** | 🟢 **Code built + laptop-validated + RUNS ON THE JETSON (2026-07-16)** — deployed and executed on the board (3.8, real webcam → relay, wire payload correct). ⚠️ §6's *posture-threshold* protocol still outstanding: whether bgsub reports `lying` on a real person, the aspect/motion numbers, and the fade time are unmeasured (needs a body in frame). |
+| **Status** | 🟢 **Code built + laptop-validated + RUNS ON THE JETSON (2026-07-16)** — deployed and executed on the board (3.8, real webcam → relay, wire payload correct). ⚠️ **Partial bench data now in (§6): `lying` does NOT hold 3 s under bgsub — it fades to `absent` within ~2 s, so a bgsub fall barely fires. Strong evidence SPEC-05 (trt_pose) is required.** A clean controlled fade measurement is still outstanding, but the direction is clear. |
 | **Priority** | 🟢 Groundwork — after Modes 1+2 are solid on hardware |
 | **Runs on** | The **Jetson** (posture *and* the fall rule) |
 | **Depends on** | SPEC-01 (contract), SPEC-02 (relay) |
@@ -276,6 +276,52 @@ posture-threshold half below still needs a body in frame.
 > ⚠️ **All postures read `absent`** in that run — the scene was empty/static, so this is
 > wiring evidence, **not** posture evidence. Whether bgsub reports `standing`/`walking`/
 > `lying` on a real person is the untested half, immediately below.
+
+### Partial bench data — 2026-07-16 (a person in frame, protocol imperfect)
+
+A first pass **with a real person** (camera head-on at torso height, subject shifting into
+position — so treat as **directional, not final**). Two runs:
+
+| Run | rows | `standing` | `walking` | `lying` | `absent` |
+|---|---|---|---|---|---|
+| `posture_selftest` | 141 | **0** | 61 | 9 | 71 |
+| `mode3_posture` | ~500 | 4 | 29 | 21 | 477 |
+
+**Two findings, both bad for the bgsub fall rule and both pointing at SPEC-05:**
+
+- ⚠️ **`lying` never held more than ~2 consecutive seconds** before flipping to `absent`
+  (longest run = 2). **The fall rule needs `lying` held `FALL_HOLD_S` = 3 s, and `absent`
+  cancels it** (§2) — so as measured, **a bgsub fall would essentially never fire**. The
+  fade is far faster than the ~8 s §1.2 estimate suggested. This is the strongest evidence
+  yet that `bgsub` cannot carry the fall rule and that SPEC-05 (`trt_pose`) is required, not
+  optional.
+- ⚠️ **`standing` is nearly unreachable.** `WALK_MOTION_THRESH` (0.02 in `posture.py`) is
+  low enough that any movement reads `walking`; the moment the person is still enough to be
+  `standing`, MOG2 fades them to `absent`. There is almost no window where a person is
+  *upright + present + still* — 0/141 in one run. A still upright person is `absent`, not
+  `standing`.
+
+**Caveats before over-reading this:** the camera was head-on at torso height (§8 warns steep
+/ head-on angles fool the aspect test — `lying` wants the body **wide across the frame**),
+and the subject was moving to get positioned, so the runs are contaminated. **A clean,
+controlled still-hold measurement is still outstanding** and could shift the numbers — but
+the *direction* (lying doesn't hold, standing is rare, fade is fast) is unambiguous.
+
+**Operational lessons paid for this session (put these in the runbook path):**
+
+- ⚠️ **Use `mode3_posture`, NOT `posture_selftest`, for live posture work.**
+  `posture_selftest` has no `time.sleep` — it paces off the microphone read, and with the
+  **dead mic it races through all iterations in seconds**, so it exits before the subject
+  can act. `mode3_posture` has an explicit `time.sleep(SECONDS_PER_TICK)`, so it paces at
+  ~1 s regardless of the mic, and runs until killed.
+- ⚠️ **Rapid camera re-open hands back empty frames.** Opening/closing the C270 in quick
+  succession (multiple short captures) leaves it returning instant blank frames → every
+  label `absent`. Give it a couple seconds to release between runs (the SPEC-07 supervisor
+  bakes in a 2 s settle for exactly this).
+- ⚠️ **Background `plink` launches orphan on the Jetson.** A backgrounded `plink` whose
+  local task ends leaves the remote Python running; several piled up and **fought over the
+  one camera**, producing racing/empty reads that looked like a code bug. Always
+  `pkill -9 -f <module>` between runs, or run the client under the supervisor.
 
 ### Outstanding — the bench (needs the Jetson + webcam + a person in frame)
 
