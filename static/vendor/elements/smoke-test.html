@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Elements offline smoke test</title>
+
+  <!-- All four assets are local. Nothing here should ever hit the network. -->
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./themes.css">
+  <link rel="stylesheet" href="./fonts/inter.css">
+  <script type="module" src="./core.js"></script>
+
+  <style>
+    body { padding: 2rem; max-width: 60rem; margin: 0 auto; }
+    section { margin-block: 1.5rem; }
+    h2 { margin-block-end: .5rem; font-size: 1rem; }
+    .row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+    #verdict { padding: .75rem 1rem; border-radius: .375rem; font-weight: 600; }
+    .pass { background: #10331a; color: #7ee787; }
+    .fail { background: #3d1418; color: #ff7b72; }
+  </style>
+</head>
+<body nve-theme="dark inter">
+
+  <h1 nve-text="heading lg">Elements offline smoke test</h1>
+  <p nve-text="body sm muted">
+    Serve this over HTTP, not <code>file://</code> — ES modules are blocked on the
+    file: protocol. From this directory run:
+    <code>python -m http.server 8080</code> then open
+    <code>http://localhost:8080/smoke-test.html</code>
+  </p>
+
+  <div id="verdict">Checking…</div>
+
+  <section>
+    <h2>Components used by the dashboard (docs/06)</h2>
+    <div class="row">
+      <nve-badge status="success">motion</nve-badge>
+      <nve-badge status="warning">loud</nve-badge>
+      <nve-badge status="danger">FALL</nve-badge>
+      <nve-dot status="success"></nve-dot>
+      <nve-pulse aria-label="live"></nve-pulse>
+      <nve-icon name="check"></nve-icon>
+      <nve-button>caregiver note</nve-button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Sparkline (motion history)</h2>
+    <nve-sparkline id="spark" size="lg" mark="area"></nve-sparkline>
+  </section>
+
+  <section>
+    <h2>Alert (fall event)</h2>
+    <nve-alert status="danger" open>Fall detected at 14:32:07</nve-alert>
+  </section>
+
+  <script type="module">
+    // Fail loudly if anything tries to leave the machine. If this fires, the
+    // page is not actually offline-safe and the vendoring is incomplete.
+    const offenders = [];
+    const realFetch = window.fetch;
+    window.fetch = (...args) => { offenders.push(String(args[0])); return realFetch(...args); };
+
+    const spark = document.getElementById('spark');
+    if (spark) spark.data = [2, 4, 3, 8, 6, 12, 9, 14, 7, 3, 5, 2];
+
+    const tags = ['nve-badge', 'nve-dot', 'nve-pulse', 'nve-alert', 'nve-sparkline',
+                  'nve-button', 'nve-icon'];
+
+    window.addEventListener('load', async () => {
+      await Promise.all(tags.map(t => customElements.whenDefined(t)));
+      // Give nve-icon a tick to resolve from its inlined registry.
+      await new Promise(r => setTimeout(r, 250));
+
+      const undef = tags.filter(t => !customElements.get(t));
+      const el = document.getElementById('verdict');
+      const ok = undef.length === 0 && offenders.length === 0;
+
+      el.className = ok ? 'pass' : 'fail';
+      el.textContent = ok
+        ? `PASS — all ${tags.length} components upgraded, 0 network calls. Offline-safe.`
+        : `FAIL — undefined: [${undef.join(', ')}] · network calls: [${offenders.join(', ')}]`;
+    });
+  </script>
+</body>
+</html>
