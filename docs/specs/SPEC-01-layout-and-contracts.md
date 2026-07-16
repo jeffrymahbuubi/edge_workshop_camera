@@ -333,9 +333,12 @@ def flag_for(feats) -> str:
       a dead mic *looks* healthy: `audio_rms` went **0.0 → 0.012–0.026**, and
       `LOUD_RMS_THRESH` (0.05) sits ~2× above that floor. Modes 1/2 can now fire
       `fall_suspected` at all; previously it was impossible, silently.
-- [ ] ⚠️ **Untested: a full reboot.** The daemon restart proves the config is read at
-      daemon start, and a boot starts the daemon the same way — but that is inference, and
-      this bug's history is *exactly* that assumptions about it were wrong.
+- [x] ~~**Untested: a full reboot.**~~ **Tested 2026-07-17, on real hardware** — the
+      voice-assistant class board (same `~/.config/pulse/default.pa` mechanism) came back
+      from a genuine power-cycle with the default source still the C270 and `audio_rms`
+      reading 0.009–0.010 from a cold boot, no manual steps. The inference was right this
+      time. (Strictly, the golden-image board itself has still never been rebooted with
+      the fix in place — but the mechanism is now boot-proven, not inferred.)
 - [ ] ⚠️ **The source name embeds the webcam's serial** (`…200901010001…`). Logitech reuses
       that string across many C270s so it will *probably* match every board — but one that
       enumerates differently **boots deaf again with no error**, which is the exact failure
