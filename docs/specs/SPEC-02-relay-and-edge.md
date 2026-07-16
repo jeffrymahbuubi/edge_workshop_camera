@@ -351,9 +351,10 @@ pactl set-default-source alsa_input.usb-046d_C270_HD_WEBCAM_200901010001-02.anal
       Verified across a PulseAudio daemon restart, then asserted on **real captured
       audio**: `audio_rms` **0.0 → 0.012–0.026**. Leave `AUDIO_DEVICE` unset —
       `AUDIO_DEVICE=C270` was flaky the same way (PortAudio intermittently "cannot see
-      cards that PulseAudio owns" and falls back to silence). Two caveats remain in
-      **SPEC-01 §6 step 3**: a full reboot is untested, and the source name embeds the
-      webcam's serial.
+      cards that PulseAudio owns" and falls back to silence). Of the two caveats in
+      **SPEC-01 §6 step 3**, one fell 2026-07-17 — a real power-cycle of the class board
+      came back with the mic alive, so the config is boot-proven — and one stands: the
+      source name embeds the webcam's serial.
 - [ ] Retune `LOUD_RMS_THRESH` (0.05). Measured ambient ≈ **0.017–0.045** — the C270's
       gain is high. Speech reads ~0.098, so 0.05 does separate them, but the margin is
       thin and the room will be noisy on the day. **Now runtime-tunable from the dashboard
