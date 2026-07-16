@@ -337,6 +337,18 @@ still showing that the Jetson understood the person completely.
       Mode 3 so the frame does clear — but only on the *next poll*, and one frame of
       skeleton-over-face would contradict the exact claim the panel makes.
       `.has-skeleton img { display: none }` makes the skeleton win immediately.
+      > ⚠️ **Narrowed to `.has-skeleton:not(.preview-on) img` — 2026-07-16.** As written,
+      > this rule **broke SPEC-08 Part B**: with the setup preview on, the frame arrived,
+      > sat in the DOM, and was hidden — the student pressed "show camera", the byte
+      > counter climbed, and the panel looked **identical**. The guard is about a *stale*
+      > frame nobody asked for; the preview is a frame the student deliberately requested,
+      > whose whole purpose is to be seen **with the skeleton drawn on it** so they can
+      > check the joints land on their body.
+      >
+      > **Found by Jeffry looking at the panel — not by the automated check**, which
+      > asserted `has-frame === true` and passed. The class was right; the pixels were not.
+      > A reminder that this file's own §6 warns the failure is invisible at the bench:
+      > `test_preview_frame_is_not_hidden_by_the_stale_face_guard` now pins it.
 
 > **Mode 3's motion/audio bars read `—`.** Correct, not a bug: Mode 3 is keypoints only
 > and sends no feature vector, so motion/audio/blobs have nothing to show. Worth knowing

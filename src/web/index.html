@@ -100,11 +100,20 @@
        empty because nothing happened, it is empty of PIXELS. */
     .video-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
     .video-wrap.has-skeleton canvas { display: block; }
-    /* A skeleton must NEVER render over a leftover Mode 1 frame. /latest.jpg
+    /* A skeleton must NEVER render over a LEFTOVER Mode 1 frame. /latest.jpg
        404s in Mode 3 so the frame does clear itself -- but only on the next poll,
        and one frame of skeleton-over-face would contradict the exact claim this
-       panel is making. Belt and braces: the skeleton wins immediately. */
-    .video-wrap.has-skeleton img { display: none; }
+       panel is making. Belt and braces: the skeleton wins immediately.
+
+       ⚠️ `:not(.preview-on)` -- added 2026-07-16 after Jeffry found the bug this
+       rule caused. The guard is about a STALE frame nobody asked for. The setup
+       preview (SPEC-08 Part B) is the opposite: a frame the student deliberately
+       switched on, whose entire purpose is to be looked at with the skeleton
+       drawn over it, so they can see whether the joints land on their body.
+       Without this exemption the frame arrived, sat in the DOM, and was hidden by
+       CSS -- `has-frame` was true and the panel looked identical to preview-off.
+       Nothing errored. Exactly the invisible failure SPEC-08 §B warns about. */
+    .video-wrap.has-skeleton:not(.preview-on) img { display: none; }
     .placeholder { text-align: center; padding: 1rem; }
     .video-wrap.has-frame .placeholder,
     .video-wrap.has-skeleton .placeholder { display: none; }

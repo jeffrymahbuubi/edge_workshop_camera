@@ -22,6 +22,7 @@ The failure mode this guards is INVISIBLE at the bench: the dashboard renders a
 frame identically whether it arrived honestly or wrecked the accounting behind it.
 """
 import base64
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -247,6 +248,51 @@ def test_the_js_route_is_a_whitelist_not_a_file_server():
     unchecked would turn a convenience route into a file-read primitive."""
     for evil in ("../relay/relay_server", "..%2f..%2fsecrets", "unknown"):
         assert client.get(f"/{evil}.js").status_code == 404
+
+
+# --- the dashboard must actually SHOW the frame -------------------------
+
+def test_preview_frame_is_not_hidden_by_the_stale_face_guard():
+    """⚠️ THE BUG JEFFRY FOUND BY LOOKING, 2026-07-16.
+
+    SPEC-04 §5.1 added `.video-wrap.has-skeleton img { display: none }` so a
+    skeleton could never render over a LEFTOVER Mode 1 face. Correct, and still
+    needed. But in Mode 3 with the preview ON, BOTH classes are set -- so the rule
+    hid the frame the student had just deliberately asked for. The frame arrived,
+    the bytes were counted, `has-frame` was true, and the panel looked EXACTLY like
+    preview-off. Nothing errored anywhere.
+
+    The automated check at the time asserted `has-frame === true` and passed. The
+    class was right; the pixels were not. That is why this test looks at the RULE.
+
+    Python cannot render CSS, so this pins the contract between the two files:
+    the guard must exempt `.preview-on`, and app.js must actually set it. If either
+    half is dropped the preview silently goes back to showing nothing.
+    """
+    web = Path(__file__).resolve().parent.parent / "src" / "web"
+    css = (web / "index.html").read_text(encoding="utf-8")
+    js = (web / "app.js").read_text(encoding="utf-8")
+
+    assert ".video-wrap.has-skeleton:not(.preview-on) img" in css, (
+        "the stale-face guard must exempt the deliberate preview, or the frame "
+        "is hidden the moment a skeleton is present")
+    assert 'classList.toggle("preview-on", previewOn)' in js, (
+        "app.js must put `preview-on` on #video-wrap, or the CSS exemption above "
+        "never matches and the frame stays hidden")
+
+
+def test_the_stale_face_guard_itself_still_exists():
+    """The exemption must not become a deletion.
+
+    With the preview OFF, a skeleton must still win over any frame Mode 1 left
+    behind -- that is the privacy claim the panel makes, and SPEC-04 §5.1's reason
+    for the rule has not changed.
+    """
+    css = (Path(__file__).resolve().parent.parent / "src" / "web"
+           / "index.html").read_text(encoding="utf-8")
+    assert "has-skeleton" in css and "display: none" in css
+    # the guard is scoped, not removed
+    assert ":not(.preview-on)" in css
 
 
 # --- what the Jetson is told (SPEC-08 §B5) ------------------------------

@@ -401,6 +401,11 @@ function renderPreview() {
   btn.textContent = previewOn ? t("hideCamera") : t("showCamera");
   btn.classList.toggle("on", previewOn);
   $("preview-banner").toggleAttribute("data-open", previewOn);
+  // Lets the frame show THROUGH the skeleton -- see index.html's
+  // `.has-skeleton:not(.preview-on) img`. Without this the preview frame arrives,
+  // sits in the DOM, and is hidden by the stale-face guard: the student presses
+  // "show camera", the bytes climb, and the panel looks unchanged.
+  $("video-wrap").classList.toggle("preview-on", previewOn);
   renderProvenance();
 }
 
