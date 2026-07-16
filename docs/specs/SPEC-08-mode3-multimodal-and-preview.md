@@ -139,7 +139,7 @@ thump + upright→lying held 1s   ← both senses agreed; it fired in a third of
 
 - [x] `mode3_posture.py` imports **`audio_energy_features` only**. Not
       `extract_features`, not `video_motion_features`.
-- [ ] ⚠️ **The §3.1 ban was about CPU, not purity.** The bug it killed was Mode 3
+- [x] ⚠️ **The §3.1 ban was about CPU, not purity.** The bug it killed was Mode 3
       running `video_motion_features` over 15 frames every second to feed a `pose.py`
       parameter that *is never read* (`motion_level` is vestigial — see SPEC-04 §3.1).
       `audio_energy_features` is an RMS over one array: **microseconds, and its result
@@ -160,9 +160,11 @@ the slider silently lies in one of three modes.
       new endpoint. *(`test_the_loud_slider_reaches_mode_3`)*
 - [x] Fusion still happens **on the Jetson**. The relay supplies a number; the edge
       decides. SPEC-06's design intact.
-- [ ] Measured ambient on this board is **0.0105–0.0120** against `LOUD_RMS_THRESH`
+- [x] Measured ambient on this board is **0.0105–0.0120** against `LOUD_RMS_THRESH`
       **0.05** — roughly 4× headroom, so a clap clears it and room noise does not.
-      **Unverified for the FAST path**: nobody has yet clapped at a real drop.
+      ✅ **Confirmed live in Mode 3 2026-07-16: `rms=0.0094`**, and it correctly did **not**
+      corroborate (no `thump +` prefix; fell back to the 3 s hold).
+      **Still unverified for the FAST path**: nobody has yet clapped at a real drop.
 
 ---
 
@@ -235,9 +237,10 @@ beats any claim on a slide. The cost of pixels stops being asserted and becomes
 - [x] **Turning it off drops the frame immediately**, not on the next posture tick — a
       face lingering after the student turned pixels off would contradict the exact
       claim the panel is making at that moment.
-- [ ] **A loud banner while ON.** "⚠ Pixels are leaving the device — setup only."
+- [x] **A loud banner while ON.** "⚠ Pixels are leaving the device — setup only."
       The panel must never quietly look like Mode 1 while claiming to be Mode 3.
-      *(Dashboard — not built yet.)*
+      ✅ Built + seen on hardware; the button also turns red. *(Dropped the leading ⚠ from
+      the copy — `nve-alert` draws its own icon and the two rendered as "⚠ ⚠".)*
 - [x] **Separate byte accounting.** Preview bytes get their **own bucket**, never
       Mode 3's. Two reasons: Mode 3's 562 B stays quotable and the ratio stays honest,
       **and** showing the two numbers side by side is the entire point of §B3.
@@ -282,17 +285,19 @@ lesson — do not re-derive it.
 
 ### B6. Invariants that MOVE, and the tests that must move with them
 
-- [ ] `test_raw_pixels_never_travel` **stays, unchanged**, and stays load-bearing. It
+- [x] `test_raw_pixels_never_travel` **stays, unchanged**, and stays load-bearing. It
       tests `_payload()` — the posture wire format — and **no pixel ever enters it**.
       The preview is a *separate* endpoint carrying a *separate* payload. That
       separation is deliberate: **Mode 3's contract stays absolute**, and the preview is
       visibly a different thing rather than a field someone can quietly add to.
-- [ ] `test_latest_jpg_still_404s_while_a_skeleton_streams` (SPEC-04 §5) **must gain a
+- [x] `test_latest_jpg_still_404s_while_a_skeleton_streams` (SPEC-04 §5) **must gain a
       precondition**: it holds *while preview is OFF*, which is the default. Add its
       mirror — `/latest.jpg` **serves** while preview is ON — so both directions are
       pinned rather than one being an accident.
-- [ ] New: preview **defaults OFF** on Mode 3 start; a mode change **clears** it;
-      preview bytes **never** land in Mode 3's bucket.
+- [x] New: preview **defaults OFF** on Mode 3 start; a mode change **clears** it;
+      preview bytes **never** land in Mode 3's bucket. *(All three pinned in
+      `tests/test_relay_preview.py`; the byte separation also confirmed on hardware —
+      preview 134 KB while Mode 3's own total sat unmoved at 117 KB.)*
 
 ---
 

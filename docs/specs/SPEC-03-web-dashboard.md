@@ -375,7 +375,16 @@ no `!important` (which would have buried the cause).
       the preview is on — it would be a lie at exactly the moment pixels are arriving.
 - [x] Verified live: button hidden outside Mode 3; toggle → relay `{"camera":true}` → banner;
       re-selecting Mode 3 **cleared it** (SPEC-08 §B4's non-sticky rule, observed working).
-- [ ] **Not yet seen with a real frame in it** — needs the Jetson.
+- [x] ✅ **Seen with a real frame — 2026-07-16**, on the real Jetson + C270, driven from a
+      remote browser through an ngrok tunnel. ON → the room with the skeleton drawn over
+      it; OFF → skeleton alone, frame `display:none`. Both confirmed **by screenshot**.
+      > ⚠️ **And the first real frame is what exposed the bug**: SPEC-04 §5.1's
+      > `.has-skeleton img { display: none }` (the stale-Mode-1-face guard) also hid the
+      > preview, because Mode 3 + preview sets **both** classes. The frame arrived, bytes
+      > were counted, `has-frame` was true — and the panel looked **identical** to
+      > preview-off. **Jeffry found it by looking; the automated check asserted the class
+      > and passed.** Now `.has-skeleton:not(.preview-on) img`, pinned by
+      > `test_preview_frame_is_not_hidden_by_the_stale_face_guard`.
 
 > **File sizes** (CLAUDE.md limit 500): `app.js` 485, `index.html` 400, `content.js` 372,
 > `compare.js` 85. app.js hit 494 and was split rather than appended to — see §9.0.
