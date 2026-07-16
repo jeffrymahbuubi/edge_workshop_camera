@@ -45,5 +45,18 @@ PIX_DIFF_THRESH = 25          # per-pixel gray-level change counted as motion
 MOTION_LEVEL_THRESH = 0.006   # fraction of changed pixels above which = moving
 MIN_BLOB_AREA = 60            # ignore motion blobs smaller than this (px)
 
+# --- mode 3: the fall rule (SPEC-04) ---
+# How long "lying" must persist after an upright posture before it is a fall.
+#
+# Default 3s is a COMPROMISE FORCED BY bgsub, not a clinical choice: MOG2
+# (history=120 @ 15fps) learns a motionless person into the background in ~8s
+# and they read "absent" -- the exact state the hold needs. 3s fires before that
+# fade. With a pose backend there is no fade to race and this can go 5-10s.
+FALL_HOLD_S = float(os.environ.get("FALL_HOLD_S", "3"))
+# An upright posture must have been seen this recently for a "lying" to count as
+# a fall. Without it, a person already lying when the camera starts reads as a
+# fall and every demo boots into a false alarm.
+UPRIGHT_LOOKBACK_S = float(os.environ.get("UPRIGHT_LOOKBACK_S", "10"))
+
 # --- cadence: both modes wake up once per second ---
 SECONDS_PER_TICK = 1.0

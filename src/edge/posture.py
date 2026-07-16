@@ -10,11 +10,20 @@ is identical no matter how posture is computed:
   POSTURE_BACKEND=bgsub   (default) -- model-free OpenCV background subtraction
   POSTURE_BACKEND=trt               -- TensorRT person detector (Jetson; step 2)
 
-Every backend returns the same dict:
+Every backend returns the same dict (SPEC-01 §5 -- a SUPERSET: bgsub keeps the
+original four fields, pose backends fill the last two):
   {"posture": "standing"|"walking"|"lying"|"absent",
    "bbox":    (x, y, w, h) or None,
    "aspect":  h/w of the bbox (0 if none),
-   "fill":    foreground area as a fraction of the frame (0..1)}
+   "fill":    foreground area as a fraction of the frame (0..1),
+   # --- pose backends only; always None for bgsub ---
+   "keypoints":   18 COCO keypoints or None,
+   "torso_angle": neck->hip vector vs vertical in degrees, or None}
+
+The pose fields are PRESENT-BUT-NONE here rather than absent so the shape is
+uniform from day one: downstream branches on whether torso_angle is None, never
+on the backend's name, which is what lets SPEC-05 drop trt_pose in with no
+rework anywhere else.
 
 Posture is inferred from the person's bounding-box GEOMETRY plus the MOTION level
 the frame-difference features already compute:
@@ -61,13 +70,15 @@ class BgSubPosture:
         contours, _ = cv2.findContours(
             mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
-            return {"posture": "absent", "bbox": None, "aspect": 0.0, "fill": 0.0}
+            return {"posture": "absent", "bbox": None, "aspect": 0.0, "fill": 0.0,
+                    "keypoints": None, "torso_angle": None}
 
         c = max(contours, key=cv2.contourArea)
         fill = float(cv2.contourArea(c)) / float(FRAME_W * FRAME_H)
         if fill < MIN_FG_FRACTION:
             return {"posture": "absent", "bbox": None, "aspect": 0.0,
-                    "fill": round(fill, 4)}
+                    "fill": round(fill, 4),
+                    "keypoints": None, "torso_angle": None}
 
         x, y, w, h = cv2.boundingRect(c)
         aspect = h / float(w) if w else 0.0
@@ -80,7 +91,8 @@ class BgSubPosture:
             posture = "standing"                    # upright + still
 
         return {"posture": posture, "bbox": (x, y, w, h),
-                "aspect": round(aspect, 2), "fill": round(fill, 4)}
+                "aspect": round(aspect, 2), "fill": round(fill, 4),
+                "keypoints": None, "torso_angle": None}
 
 
 class TrtPosture:
