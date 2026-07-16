@@ -20,7 +20,8 @@ The Jetson senses. The laptop displays. **What crosses that cable is the entire 
 and you choose it, live, with three buttons on the dashboard.
 
 Everything is watchable in a browser at `http://127.0.0.1:8000`: the live video (or its
-pointed absence), a skeleton, the bandwidth each mode costs, and a fall alarm.
+pointed absence), a skeleton, the bandwidth each mode costs, and a fall alarm you can
+**see and hear** — a siren plus a spoken *"Fall detected"*.
 
 ![The dashboard on first load](docs/images/dashboard-first-load.png)
 
@@ -363,6 +364,22 @@ your real room in it):
 
 Mode 2's blank panel is **not a bug**. It is the privacy lesson, made watchable.
 
+### The alarm you can hear
+
+When any mode decides **FALL?**, the dashboard does not just show the red banner — it
+**sounds a two-tone siren and then says _"Fall detected"_** (a dashboard switched to 中文
+says 「偵測到跌倒」), repeating every few seconds until the person gets up. The sound is
+synthesized in the browser — no audio file, works with no internet — and it plays wherever
+the dashboard is open, remote viewers included.
+
+Two things worth knowing before your first fall:
+
+- **Browsers keep a page silent until you have clicked it once.** Any click counts — by the
+  time you have pressed a Mode button you are already unlocked. If a fresh dashboard shows
+  the banner but says nothing, click anywhere.
+- **There is no mute button.** Falls in quick succession re-alarm each time; use the
+  browser tab's own mute if you need to rehearse in silence.
+
 ---
 
 ## Camera placement — read this before you blame the code
@@ -489,7 +506,7 @@ FALL_HOLD_S=2 RELAY_URL=http://<LAPTOP_IP>:8000 SENSOR=webcam python3 -u -m edge
 | `src/relay/` | The relay + web dashboard. **Laptop.** |
 | `src/edge/` | The three mode clients, the supervisor, the fall rule, the pose model wrapper. **Jetson.** |
 | `src/common/` | Shared config, wire codec, and the model-free feature extraction both sides use. |
-| `src/web/` | The dashboard: `index.html`, `app.js` (live instrument), `content.js` (all copy, both languages), `compare.js` (the teaching section). |
+| `src/web/` | The dashboard: `index.html`, `app.js` (live instrument), `content.js` (all copy, both languages), `compare.js` (the teaching section), `alarm.js` (the audible fall alarm). |
 | `src/models/` | `movenet_lightning.tflite` — 4.7 MB, committed, no download needed. |
 | `tests/` | The test suite (laptop): `uv run --extra dev python -m pytest tests/ -q` |
 | [`docs/specs/`](docs/specs/) | **The build guide.** SPEC-01 is the contract — if any spec disagrees with it, SPEC-01 wins. Each spec carries its own build status and the open questions next to the decisions they affect. |

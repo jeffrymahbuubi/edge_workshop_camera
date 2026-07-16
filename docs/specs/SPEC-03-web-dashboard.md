@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| **Status** | 🟢 **Built + verified in a real browser** (2026-07-16, playwright-cli — §7, 8/10 checks; the 2 open are cable-pull, bench-only). **Since extended** with the SPEC-06 fall-sensitivity sliders and the SPEC-07 Mode 1/2/3 buttons — both browser-verified live against the Jetson. |
+| **Status** | 🟢 **Built + verified in a real browser** (2026-07-16, playwright-cli — §7, 8/10 checks; the 2 open are cable-pull, bench-only). **Since extended** with the SPEC-06 fall-sensitivity sliders, the SPEC-07 Mode 1/2/3 buttons — both browser-verified live against the Jetson — and the SPEC-09 audible fall alarm (2026-07-17). |
 | **Priority** | 🔴 **TOP** (with SPEC-02) |
 | **Runs on** | The **student laptop**, served by `relay_server.py`. Never the Jetson. |
 | **Depends on** | SPEC-02 (`/events`, `/latest.jpg`, `/reset`) — ✅ all built |
@@ -15,12 +15,13 @@
 > **Mode 1/2/3 buttons** (SPEC-07, drive `/mode`), the **Fall sensitivity** panel with two
 > sliders (SPEC-06, drive `/config`), and the original reset/theme controls. New element ids
 > since the §7 audit: `mode1-btn`/`mode2-btn`/`mode3-btn`, `loud-slider`/`loud-val`,
-> `motion-slider`/`motion-slider-val`. Two open rendering bugs from the first browser load
-> (fall banner on load; theme loads light) are **still Jeffry's to fix** — see §7 for the
+> `motion-slider`/`motion-slider-val`. The two rendering bugs from the first browser load
+> (fall banner on load; theme loads light) were **fixed in `47401d9`** — §7 keeps the
 > root causes.
 
-**Built:** `src/web/index.html` + `src/web/app.js`, served by the relay at `GET /`
-(`/app.js`, and `/vendor/*` mounted via `StaticFiles`). Open
+**Built:** `src/web/index.html` + four ES modules — `app.js`, `content.js` (§9),
+`compare.js` (§9.0), `alarm.js` (SPEC-09) — served by the relay at `GET /` and
+`/{name}.js` (a whitelist, `_JS_MODULES`; `/vendor/*` mounted via `StaticFiles`). Open
 **`http://<laptop-ip>:8000/`** — add `?device=bench02` to watch the other bench.
 
 **Build order matters.** Per `docs/01-design/06` § *Build & test sequence*: get the
@@ -386,8 +387,10 @@ no `!important` (which would have buried the cause).
       > and passed.** Now `.has-skeleton:not(.preview-on) img`, pinned by
       > `test_preview_frame_is_not_hidden_by_the_stale_face_guard`.
 
-> **File sizes** (CLAUDE.md limit 500): `app.js` 485, `index.html` 400, `content.js` 372,
-> `compare.js` 85. app.js hit 494 and was split rather than appended to — see §9.0.
+> **File sizes** (CLAUDE.md limit 500, re-counted 2026-07-17): `app.js` **567 — over the
+> limit**, `index.html` 446, `content.js` 411, `alarm.js` 163, `compare.js` 96. app.js was
+> split at 494 (§9.0) but SPEC-06/07/08 additions grew it past 500 anyway; SPEC-09 went
+> into its own module for this reason. **Open: app.js owes a split on its next touch.**
 
 > **Console noise.** The only console errors are the by-design `/latest.jpg` 404s — 187 in
 > one run, ~5/sec while no frame exists. No JS errors at all. The 404 *is* the privacy

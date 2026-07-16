@@ -103,8 +103,13 @@ nvidia-workshop/
 │   │                                  default resolves on BOTH machines unedited
 │   └── web/             → served by the relay
 │       ├── index.html
-│       ├── app.js                the chart AND the Mode 3 skeleton canvas
+│       ├── app.js                the live instrument: chart, status, Mode 3 skeleton canvas
+│       ├── content.js            ALL copy, both languages (SPEC-03 §9)
+│       ├── compare.js            the three-mode teaching section (SPEC-03 §9.0)
+│       ├── alarm.js              the audible fall alarm (SPEC-09)
 │       └── vendor/elements/      vendored NVIDIA Elements UI (offline)
+│                                  ⚠️ new .js modules must ALSO join relay_server's
+│                                  _JS_MODULES whitelist or the dashboard loads blank
 ├── scripts/             → laptop provisioning (ICS setup) — NOT app code
 └── docs/
 ```
