@@ -48,7 +48,6 @@ means the browser reached the relay; `waiting…` means the Jetson is not sendin
 - [Troubleshooting](#troubleshooting--the-three-failures-that-look-like-bugs) — the three failures that look like bugs and are not
 
 **Reference**
-- [Running the tests](#running-the-tests)
 - [Repo layout](#repo-layout)
 
 > **In a hurry?** [Part 1](#part-1--the-laptop) → [Part 2](#part-2--the-jetson) →
@@ -480,14 +479,6 @@ FALL_HOLD_S=2 RELAY_URL=http://<LAPTOP_IP>:8000 SENSOR=webcam python3 -u -m edge
 
 ---
 
-## Running the tests
-
-```bash
-uv run --extra dev python -m pytest tests/ -q       # 103 tests
-```
-
----
-
 ## Repo layout
 
 | Path | What's in it |
@@ -497,6 +488,6 @@ uv run --extra dev python -m pytest tests/ -q       # 103 tests
 | `src/common/` | Shared config, wire codec, and the model-free feature extraction both sides use. |
 | `src/web/` | The dashboard: `index.html`, `app.js` (live instrument), `content.js` (all copy, both languages), `compare.js` (the teaching section). |
 | `src/models/` | `movenet_lightning.tflite` — 4.7 MB, committed, no download needed. |
-| `tests/` | 103 tests. Run them on the laptop. |
+| `tests/` | The test suite (laptop): `uv run --extra dev python -m pytest tests/ -q` |
 | [`docs/specs/`](docs/specs/) | **The build guide.** SPEC-01 is the contract — if any spec disagrees with it, SPEC-01 wins. Each spec carries its own build status and the open questions next to the decisions they affect. |
 | [`docs/`](docs/README.md) | Design decisions, hardware runbooks, and the reasoning behind the wrong turns. |
