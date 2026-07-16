@@ -16,10 +16,11 @@
 //    only for the one second where loud + was-moving + now-still coincide
 //    (features.py) -- the next event clears it. Jeffry's first hardware test
 //    proved it: the siren started and was cut mid-wail, and the words never
-//    played. So once the alarm begins it is LATCHED for one full cycle
-//    (MIN_SOUND_MS): a falling edge inside the latch schedules the stop for
-//    the latch's end instead of executing it. Past the latch, a falling edge
-//    stops everything immediately -- the person got up, the room goes quiet.
+//    played. So once the alarm begins it is LATCHED for MIN_SOUND_MS (two
+//    full cycles -- Jeffry sized it after hearing one cycle in the room): a
+//    falling edge inside the latch schedules the stop for the latch's end
+//    instead of executing it. Past the latch, a falling edge stops
+//    everything immediately -- the person got up, the room goes quiet.
 //
 //  * REPLAY. On (re)connect the relay replays its 60 s ring buffer through the
 //    same render path (SPEC-03), so a FALL? from a minute ago repaints the
@@ -34,8 +35,9 @@
 
 const HOLDOFF_MS = 2000;    // the replay window after a connect -- see above
 const CYCLE_MS = 4000;      // siren (1.6 s) + speech + a breath, then again
-const MIN_SOUND_MS = 3800;  // the latch: one full cycle, deliberately < CYCLE_MS
-                            // so a latched stop always lands before cycle two
+const MIN_SOUND_MS = 7800;  // the latch: TWO full cycles (~8 s, Jeffry's call),
+                            // deliberately just under 2×CYCLE_MS so a latched
+                            // stop always lands before cycle three starts
 
 let ctx = null;          // AudioContext -- created on first gesture, NEVER before
 let fallActive = false;  // the banner's boolean, mirrored

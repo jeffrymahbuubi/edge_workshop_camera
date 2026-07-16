@@ -39,7 +39,7 @@ renderStatus() ── fall boolean (same as banner) ──▶ setFallAlarm(on, t
     rising edge  (live)      ──▶ siren NOW, then every 4 s: siren (1.6 s) + speech
     rising edge  (≤2 s after ──▶ deferred to the window's end; a replayed clear
                   a connect)     cancels it
-    falling edge (<1 cycle)  ──▶ finish the cycle — the words must play (latch)
+    falling edge (<2 cycles) ──▶ finish two full cycles ≈ 8 s (latch)
     falling edge (after)     ──▶ cut the siren, cancel the speech, NOW
 ```
 
@@ -54,9 +54,11 @@ true only for the one second where loud + was-moving + now-still coincide
 (`features.py`) — the next event clears it. ⚠️ **Found on hardware by Jeffry
 (2026-07-17), not at a desk**: the first build stopped on the falling edge
 unconditionally, so the siren was cut mid-wail and the words never played. So the alarm
-**latches for one full cycle** (3.8 s — siren + speech): a falling edge inside the
-latch schedules the stop for the latch's end; a falling edge after it stops everything
-immediately (the person got up, the room goes quiet *now*).
+**latches for two full cycles** (`MIN_SOUND_MS` = 7.8 s of siren + speech, twice —
+sized by Jeffry after hearing one cycle in the room; it must stay just *under* a
+multiple of the 4 s cycle so the stop lands between cycles, never mid-siren): a falling
+edge inside the latch schedules the stop for the latch's end; a falling edge after it
+stops everything immediately (the person got up, the room goes quiet *now*).
 
 **Constraint 3 — the ring-buffer replay.** On (re)connect the relay replays 60 s of
 history through the same render path (SPEC-03). A FALL? from a minute ago must repaint
@@ -112,7 +114,11 @@ results:
 - [x] **The hardware bug**: after a click, a single 1-second fall pulse → `sounding`
       still true right after the clearing event (the latch holding where the first
       build had already cut it), spoken `["Fall detected", "en-US"]` recorded, then
-      self-stopped — exactly 1 cycle, console shows `sounding` then `stopped`.
+      self-stopped — console shows `sounding` then `stopped`.
+      ✅ *Re-verified at the two-cycle latch (2026-07-17): the same 1 s pulse sounded
+      for **7,805 ms** by console timestamps — the 7.8 s constant to the millisecond —
+      exactly 2 cycles, 2 utterances (at +1.6 s and +5.6 s), still sounding at +5 s
+      where the one-cycle latch had already stopped, and no third cycle started.*
 - [x] A held fall (~9 s) → 5 more cycles; the clear stops it immediately,
       `speechSynthesis` queue empty.
 - [x] Reload with FALL? events in the ring buffer (ending cleared) → the event log
