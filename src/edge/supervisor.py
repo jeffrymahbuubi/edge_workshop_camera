@@ -8,6 +8,10 @@ deliberately dumb: the relay holds the choice, the Jetson polls and obeys.
 
 Run once, and leave it running:
     RELAY_URL=http://192.168.137.1:8000 SENSOR=webcam python3 -u -m edge.supervisor
+
+The laptop IP must be on the Jetson's own subnet: 192.168.137.1 for the workshop
+image (Jetson at .137.100), 192.168.1.1 for the voice-assistant class image
+(Jetson at .1.100). README Step 6 has the table.
 """
 import os
 import signal

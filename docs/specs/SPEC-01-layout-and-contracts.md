@@ -340,7 +340,29 @@ def flag_for(feats) -> str:
       that string across many C270s so it will *probably* match every board — but one that
       enumerates differently **boots deaf again with no error**, which is the exact failure
       being fixed. Verify per board, or replace the line with a login-time script that
-      pattern-matches `usb.*C270`.
+      pattern-matches `usb.*C270`. *(One more data point, 2026-07-17: a second physical
+      C270 on the voice-assistant class board enumerated with the **identical** string —
+      the reuse theory holds so far.)*
+
+### 6b. The second board type — the voice-assistant class image (2026-07-17)
+
+The real workshop runs **after the voice-assistant class, on that class's boards** — which
+are *not* clones of this golden image. An end-to-end rehearsal on one (same
+`jetson-2gNANO` hostname, but a different physical board at `192.168.1.100`) measured the
+gap against the checklist above:
+
+| Checklist step | On the class image |
+|---|---|
+| 3 — mic default source | ❌ **shipped deaf** (onboard jack) — fixed by hand on the rehearsal board only |
+| 4 — `sounddevice` + `libportaudio2` | ❌ **absent** (`audio` silently 0.0000) — installed by hand on the rehearsal board only |
+| 5–6 — code + model | arrives via `git clone` (README Part 2) instead of being baked in |
+| network | `192.168.1.x`; `<LAPTOP_IP>` is **`192.168.1.1`** (README Step 6 table) |
+
+README Step 9 now checks both missing pieces in order, so a student on an unfixed board
+can self-serve — but **pre-fixing the fleet before class remains the safer play**; steps 3
+and 4 are done on exactly one class board today. Everything else held: Python 3.8,
+TensorFlow's `tf.lite` runs MoveNet untouched, and all three modes + mic were verified
+live on that board (`audio_rms` 0.010–0.012 quiet-room).
 
 ---
 
