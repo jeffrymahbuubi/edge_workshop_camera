@@ -10,11 +10,29 @@
 
 | | |
 |---|---|
-| **Status** | 🟢 Verified on this laptop 2026-07-16 — tunnel up, auth gate confirmed, dashboard renders |
-| **Tier** | ngrok **free/hobby**. A random `*.ngrok-free.dev` hostname; no custom domain needed |
+| **Status** | 🟢 **Verified END TO END on hardware 2026-07-16** — remote browser → tunnel → relay → **real Jetson**, all three modes driven from the tunnel |
+| **Tier** | **PAID** — a custom domain works. `https://edge-sensing.ngrok.app` is reserved on this account |
 | **Version** | `3.39.8-msix-stable`, installed via MSIX (`WindowsApps\ngrok.exe`), already authenticated |
 | **Use it for** | Showing the live dashboard to someone remote — a boss, a co-instructor, a colleague |
 | **Do NOT use it for** | The workshop itself. Students sit next to the laptop; `http://127.0.0.1:8000` is right there |
+
+> ⚠️ **The tunnel currently runs with NO authentication — Jeffry's explicit decision**
+> (2026-07-16), made after being shown the specific risk below. Anyone with the URL can
+> watch the camera and turn the Mode 3 preview on. **Start it only for a demo, and stop it
+> after** (§3). If you want it protected again, `--basic-auth` still works (§1).
+
+## 0. The commands, once you know what you are doing
+
+```powershell
+# 1. relay (leave running)
+uv run uvicorn relay.relay_server:app --app-dir src --host 0.0.0.0 --port 8000
+
+# 2. tunnel -- custom domain, works on this account
+ngrok http 8000 --url=https://edge-sensing.ngrok.app
+
+# 3. when the demo is over -- DO NOT SKIP
+Get-Process ngrok | Stop-Process -Force
+```
 
 ---
 
@@ -143,11 +161,36 @@ Worth stating plainly, because a tunnel *looks* like it moves the architecture:
 
 ---
 
-## 6. Open
+## 6. End-to-end on hardware — 2026-07-16 ✅
+
+Driven **entirely from the remote browser** through `https://edge-sensing.ngrok.app`,
+against the real Jetson + C270 over the LAN cable. Every mode button clicked in the tunnel;
+the Jetson's supervisor swapped clients each time.
+
+| | Through the tunnel | Verdict |
+|---|---|---|
+| `GET /config` | 200, sliders read **0.050 / 0.006** | ✅ *(this is what the URL-credentials trap breaks)* |
+| SSE `/events` | badge **connected**, live updates | ✅ streaming survives the proxy |
+| **Mode 1** | `▶ Mode 1 live`, **139 KB/s**, frame rendering, `audio 0.0100` | ✅ real JPEG stream proxies fine |
+| **Mode 2** | `▶ Mode 2 live`, **60 B/s**, **panel blanked** | ✅ the privacy lesson survives the tunnel |
+| **Mode 3** | `▶ Mode 3 live`, **521 B/s**, **live MoveNet skeleton** | ✅ |
+| **Setup preview** | ON → real frame + banner + 14.8 KB/s; OFF → dropped instantly | ✅ Mode 3's own total **unmoved** |
+
+**The Mode 1 question is answered: a real ~139 KB/s JPEG stream goes through the free-tier
+tunnel without trouble** — that was the open item, and it was the case most likely to strain it.
+
+> ⚠️ **The Jetson's `~/EDGE-CAMERA/` is a MANUAL COPY, not a git clone**, and it was
+> **months of commits stale** — it silently ran the pre-SPEC-08 Mode 3 with no audio at all.
+> Nothing warned; the logs just lacked an `rms=` field. **A clone of `main` at
+> `~/edge_workshop_camera/` is now the live one** (`cd ~/edge_workshop_camera/src`). If a
+> feature you just pushed "does not work on the Jetson", check *which copy is running*
+> before you debug the code.
+
+## 7. Open
 
 - [ ] ngrok free shows a **browser interstitial** on first visit for some accounts. It did
-      not appear in this test (the dashboard loaded straight through), but if a viewer
-      reports a "You are about to visit…" page, they click through once and it sticks.
-- [ ] **A tunnel plus a live Mode 1 stream has not been tried.** Everything here was tested
-      with the relay idle. Frame rate through the tunnel under a real ~583 KB/s Mode 1 load
-      is unmeasured — and that is the mode most likely to strain it.
+      not appear here (the dashboard loaded straight through), but if a viewer reports a
+      "You are about to visit…" page, they click through once and it sticks.
+- [ ] The `setup camera` **rate does not decay** after the preview is switched off (it
+      froze at 15.0 KB/s). Same cosmetic issue as Mode 1's rate column — the EWMA has no
+      idle input. Totals and the ratio are correct.

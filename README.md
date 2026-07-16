@@ -395,8 +395,11 @@ software problem, and bad framing has ruined more test runs here than every bug 
   on it, and Mode 3 will never fire no matter how convincingly you fall.
 - **Check the frame before you trust anything.** In Mode 3, press **"show camera (setup)"**
   on the dashboard — it turns the camera on temporarily so you can see what it sees.
-  Watch the bandwidth number jump about 1,000×, frame yourself, then **turn it off** and
-  watch it collapse back. That jump is the whole lesson in one button.
+  Frame yourself, then **turn it off** again.
+  Watch the `setup camera` row while you do: **one frame a second costs ~30× the entire
+  skeleton** (measured: ~15 KB/s against Mode 3's ~520 B/s) — and Mode 1 sends *fifteen*
+  frames a second. Even the cheapest possible pixel stream dwarfs the keypoints. That is
+  the lesson, in one button you pressed yourself.
 
 ### Safety
 

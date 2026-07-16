@@ -71,8 +71,17 @@ export const UI = {
     showCamera: "show camera (setup)",
     hideCamera: "hide camera",
     // No leading ⚠ -- nve-alert draws its own icon and the two rendered as "⚠ ⚠".
-    previewBanner: "Pixels are leaving the device — setup only. This is what " +
-      "Mode 1 does every second. Turn it off and watch the number collapse.",
+    //
+    // ⚠️ MEASURED ON HARDWARE 2026-07-16, and it corrected this text. The first
+    // version claimed "this is what Mode 1 does every second", implying the
+    // ~1,000x jump. WRONG: the preview sends ONE frame per second (~15 KB/s vs
+    // Mode 3's ~520 B/s = ~30x). Mode 1 sends FIFTEEN frames a second. So the
+    // preview is a TASTE of Mode 1's cost, not the thing itself -- and saying
+    // otherwise overstated it by ~35x on the one page whose whole job is to be
+    // honest about bytes.
+    previewBanner: "Pixels are leaving the device — setup only. One frame a " +
+      "second already costs ~30× the whole skeleton. Mode 1 sends fifteen. " +
+      "Turn it off and watch the number collapse.",
 
     // The teaching blocks
     howToFall: "How to trigger FALL",
@@ -145,7 +154,8 @@ export const UI = {
 
     showCamera: "顯示攝影機（校正用）",
     hideCamera: "關閉攝影機",
-    previewBanner: "影像正在離開裝置 —— 僅供校正使用。模式 1 每一秒都在做這件事。" +
+    previewBanner: "影像正在離開裝置 —— 僅供校正使用。每秒只送一張畫面，" +
+      "就已經是整副骨架的約 30 倍；而模式 1 每秒送十五張。" +
       "把它關掉，看看數字如何直接掉下來。",
 
     howToFall: "如何觸發「跌倒」",

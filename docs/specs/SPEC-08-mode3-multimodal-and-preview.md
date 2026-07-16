@@ -17,7 +17,7 @@
 
 | | |
 |---|---|
-| **Status** | 🟡 **Parts A + B BUILT on the laptop (TDD, 101 tests pass, was 66) — NOT yet hardware-validated, and Part B has NO DASHBOARD UI yet** (toggle + banner + preview byte row still to do). See §C for what is unproven |
+| **Status** | 🟢 **Parts A + B BUILT (103 tests) and RUNNING ON HARDWARE 2026-07-16** — Mode 3 reads the mic on the real Jetson (`rms=0.0094` live), the preview shows a real frame, and its bytes stay out of Mode 3's bucket. **Still unproven: the FAST path** — nobody has clapped at a real drop. See §C |
 | **Priority** | Part A (fusion) then Part B (preview), then SPEC-03's teaching content |
 | **Runs on** | The **Jetson** (fusion) + the **relay** (preview state & accounting) |
 | **Depends on** | SPEC-01 (contract), SPEC-04 (the fall rule), SPEC-06 (live thresholds) |
@@ -198,14 +198,25 @@ This is not a compromise of the bandwidth lesson. It is the strongest delivery o
 available:
 
 ```
-Mode 3                    562 B/s      ← press "show camera"
-Mode 3 + setup preview  ~583 KB/s      ← ~1,037× more, on screen, instantly
+Mode 3                    522 B/s      ← press "show camera"
+Mode 3 + setup preview   ~15 KB/s      ← ~30× more, on screen, instantly
                                           press it again → collapses back
 ```
 
 A student **moves that number with their own hand** and watches it collapse back. That
 beats any claim on a slide. The cost of pixels stops being asserted and becomes
 *demonstrated*.
+
+> ⚠️ **MEASURED 2026-07-16, and it corrected this spec.** This block originally read
+> `~583 KB/s ← ~1,037× more`, reasoning from Mode 1's figure. **That was wrong by ~35×.**
+> The preview posts **ONE frame per tick** (`frames[-1]`, once a second); Mode 1 posts
+> **fifteen**. Hardware: preview **14.8–15.0 KB/s** against Mode 3's **522 B/s** = **~29×**.
+>
+> **The honest framing is arguably stronger:** *one frame a second — the cheapest pixel
+> stream you could possibly build — already costs 30× the entire skeleton, and Mode 1
+> sends fifteen of them.* The dashboard banner and README §camera-placement now say this.
+> Nobody had run the preview against a real camera when the original number was written,
+> which is exactly the kind of claim §C exists to catch.
 
 ### B4. Rules — all of them load-bearing
 
@@ -298,13 +309,43 @@ lesson — do not re-derive it.
       ✅ **DONE 2026-07-16 — `tests/test_relay_preview.py`, 17 tests**, written before
       the code. `test_raw_pixels_never_travel` needed **no change at all** — which is
       the evidence the separate-endpoint design was right rather than merely tidy.
-- [ ] Browser (the standing rule — playwright-cli, load it and look): toggle ON → frame
+- [x] Browser (the standing rule — playwright-cli, load it and look): toggle ON → frame
       appears + banner + the byte counter jumps; toggle OFF → skeleton only, counter
       collapses; **Mode 3's own total unmoved by the whole exercise**.
+      ✅ **DONE ON HARDWARE 2026-07-16**, driven from a remote browser through an ngrok
+      tunnel against the real Jetson + C270:
+
+      | | ON | OFF |
+      |---|---|---|
+      | frame | ✅ real camera, first time ever | ✅ dropped immediately |
+      | banner | ✅ shown | ✅ gone |
+      | `setup camera` row | 14.8 KB/s / 134 KB | — |
+      | **Mode 3's own row** | **522 B/s / 117 KB** | **522 B/s — UNMOVED** ✅ |
+
+      The separate-bucket rule (§B4) is the one that mattered and it held: the preview
+      accumulated 134 KB while Mode 3's total sat at 117 KB, untouched.
 - [ ] **Hardware, with a person**: clap at the moment of a controlled lie-down → fires
-      in ~1 s with `thump +` in the reason. Lie down silently → still fires at 3 s.
+      in ~1 s with `thump +` in the reason. **STILL THE OPEN ONE** — nobody has clapped
+      at a real drop, so `FALL_HOLD_FAST_S = 1 s` remains a guess (§D).
       ⚠️ Fix framing **first** (SPEC-04 §8: camera metres back, full body, **side-on**)
       — and the preview from Part B is now the tool that makes that possible.
+- [x] **Hardware, the vision-only path + the mic**: ✅ **2026-07-16.** Mode 3 on the real
+      Jetson, from a clone of `main`:
+
+      ```
+      posture=lying  score=0.48  abnormal=True  rms=0.0094  0.6KB
+          -> flag=FALL?  reason=upright→lying held 3s
+      ```
+
+      Three things this proves at once: **the mic is read** (`rms=0.0094` — Mode 3 had
+      never asked it anything before), the **payload is 611 B** as measured on the laptop
+      (`0.6KB`), and — the important one — **ambient did NOT corroborate**. 0.0094 sits far
+      under `LOUD_RMS_THRESH` 0.05, so there is no `thump +` prefix and the rule fell back
+      to the **3 s vision-only hold**. That is §A3's "never blocks, never falsely upgrades"
+      property, observed rather than asserted.
+      *(The `lying` itself was spurious — `score=0.48`, nobody performing, camera framing
+      not set. Irrelevant to what is being tested here, and exactly what SPEC-04 §8 warns
+      about.)*
 - [ ] **Hardware, deaf-board simulation**: unset the PulseAudio default source → Mode 3
       must degrade to today's 3 s vision-only rule, **not** stop alarming. This is A2's
       whole argument; if it is never tested, the argument was decoration.
