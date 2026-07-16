@@ -1,0 +1,47 @@
+# Dependencies for the LAPTOP only (the relay + dashboard, and the tests).
+#
+# ⚠️ THE JETSON MUST NOT USE THIS FILE. Do not pip install anything on the Nano.
+# OpenCV, NumPy and TensorFlow come from JetPack's system packages; a
+# `pip install opencv-python` there tries to BUILD FROM SOURCE on a 4-core ARM
+# board and effectively hangs. The golden SD image already has every Jetson
+# dependency (see README). The Jetson only ever runs `python3 -m edge.*`.
+#
+# ⚠️ NOT AN INSTALLABLE PACKAGE, on purpose -- see [tool.uv] at the bottom.
+
+[project]
+name = "nvidia-workshop-edge-sensing"
+version = "0.1.0"
+description = "Edge vs cloud sensing workshop -- relay + dashboard (laptop side)"
+requires-python = ">=3.9"
+
+dependencies = [
+    "fastapi>=0.110",              # the relay
+    "uvicorn>=0.27",               # serves it
+    "pydantic>=2.5",               # the wire contracts (SPEC-01 §4.3)
+    "numpy>=1.24",                 # features + codec
+    "opencv-python-headless>=4.8", # Mode 1 decodes JPEGs on the laptop.
+                                   # -headless, not opencv-python: the relay
+                                   # never opens a window, and the GUI build
+                                   # drags in Qt for nothing.
+    "requests>=2.31",              # the edge clients, when run on the laptop
+                                   # against the synthetic sensor
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",                 # fastapi's TestClient needs it. Without it the
+                                   # relay tests error at COLLECTION, which reads
+                                   # like a failure and is not one.
+]
+
+[tool.uv]
+# Install the DEPENDENCIES, never this project as a package.
+#
+# WHY: relay_server.py finds the dashboard with
+#     WEB_DIR = Path(__file__).parent.parent / "web"
+# If `relay` were installed into site-packages, `../web` would not exist and the
+# dashboard would 404 -- while the API kept working, so it would look like a
+# front-end bug. The code is meant to be READ and RUN from the clone (students
+# open these files), which is why every command passes `--app-dir src`.
+package = false
