@@ -234,10 +234,11 @@ def test_bad_token_cannot_push_pixels():
 
 # --- the dashboard's modules -------------------------------------------
 
-def test_the_three_dashboard_modules_are_served():
-    """app.js imports content.js and compare.js. A 404 on either is a blank page
-    with one console line -- and the relay's own tests would not have noticed."""
-    for name in ("app", "content", "compare"):
+def test_the_four_dashboard_modules_are_served():
+    """app.js imports content.js, compare.js and alarm.js (SPEC-09). A 404 on
+    any import is a blank page with one console line -- and the relay's own
+    tests would not have noticed."""
+    for name in ("app", "content", "compare", "alarm"):
         r = client.get(f"/{name}.js")
         assert r.status_code == 200, name
         assert "javascript" in r.headers["content-type"]

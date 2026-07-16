@@ -12,6 +12,8 @@ import { UI, FLAGS, PROVENANCE, WHY_BLANK, MODE_INFO, MODE_IDS } from "/content.
 // The comparison section lives in its own module: it is static teaching content
 // with no live data, and app.js had reached CLAUDE.md's 500-line limit.
 import { renderCompare, wireCompare } from "/compare.js";
+// The audible fall alarm (SPEC-09) -- its own module for the same reason.
+import { setFallAlarm } from "/alarm.js";
 
 const DEVICE = new URLSearchParams(location.search).get("device") || "bench01";
 const WINDOW_S = 60;          // chart window, matches the relay's ring buffer
@@ -177,6 +179,9 @@ function renderStatus(ev) {
     // used to be a no-op and the banner stayed up forever. See index.html.
     alert.removeAttribute("data-open");
   }
+  // The audible alarm keys on the SAME boolean as the banner -- never a second
+  // fall computation. alarm.js does its own edge detection and replay gating.
+  setFallAlarm(!!fall, t("fallSpoken"), lang);
 }
 
 // ------------------------------------------------------------- the lesson

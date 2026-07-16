@@ -41,6 +41,9 @@ export const UI = {
     blobs: "blobs",
     fall: "fall",
     posture: "posture",
+    // Spoken aloud by the fall alarm (SPEC-09) -- keep it short; a room full of
+    // people needs to parse it mid-siren.
+    fallSpoken: "Fall detected",
 
     tuning: "Fall sensitivity",
     tuningLive: "live",
@@ -127,6 +130,7 @@ export const UI = {
     blobs: "區塊",
     fall: "跌倒",
     posture: "姿態",
+    fallSpoken: "偵測到跌倒",
 
     tuning: "跌倒靈敏度",
     tuningLive: "即時",

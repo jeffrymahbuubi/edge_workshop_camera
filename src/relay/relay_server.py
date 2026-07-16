@@ -249,14 +249,16 @@ def dashboard():
 
 # The dashboard's ES modules. A WHITELIST, not a directory listing: `name` comes
 # straight off the URL, so serving WEB_DIR/f"{name}.js" unchecked would hand a
-# path-traversal (`/..%2f..%2fsecrets.js`) a file read. The set is three entries
+# path-traversal (`/..%2f..%2fsecrets.js`) a file read. The set is four entries
 # and the dashboard is not going to grow dozens.
 #
 #   app     -- the live instrument (SSE, chart, status, tuning, mode switch)
 #   content -- all copy, both languages (SPEC-03 §9)
 #   compare -- the three-mode teaching section (static; split out when app.js
 #              hit CLAUDE.md's 500-line limit)
-_JS_MODULES = {"app", "content", "compare"}
+#   alarm   -- the audible fall alarm (SPEC-09; ⚠️ an import that 404s kills the
+#              WHOLE module graph, so a new module MUST be added here)
+_JS_MODULES = {"app", "content", "compare", "alarm"}
 
 
 @app.get("/{name}.js")
