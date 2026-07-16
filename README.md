@@ -30,6 +30,33 @@ means the browser reached the relay; `waiting…` means the Jetson is not sendin
 
 ---
 
+## Contents
+
+**Understand it**
+- [The one picture that is the whole workshop](#the-one-picture-that-is-the-whole-workshop) — Mode 1 vs 2 vs 3, in three images
+- [The three modes](#the-three-modes) — what each one does, why, and what it costs
+  - [About the sound — this is a *multi-modal* workshop](#about-the-sound--this-is-a-multi-modal-workshop)
+  - […and all of the above is already on the dashboard](#and-all-of-the-above-is-already-on-the-dashboard) — instructors, start here
+
+**Set it up** — *do Part 1 before Part 2; the Jetson needs the laptop's address*
+- [What you need](#what-you-need)
+- [Part 1 — the laptop](#part-1--the-laptop) — Steps 1–6
+- [Part 2 — the Jetson](#part-2--the-jetson) — Steps 7–11
+
+**Make it work**
+- [Camera placement](#camera-placement--read-this-before-you-blame-the-code) — **the biggest single factor.** Read it before you blame the code
+- [Troubleshooting](#troubleshooting--the-three-failures-that-look-like-bugs) — the three failures that look like bugs and are not
+
+**Reference**
+- [Running the tests](#running-the-tests)
+- [Repo layout](#repo-layout)
+
+> **In a hurry?** [Part 1](#part-1--the-laptop) → [Part 2](#part-2--the-jetson) →
+> [Camera placement](#camera-placement--read-this-before-you-blame-the-code). Everything
+> else can wait until something surprises you.
+
+---
+
 ## The one picture that is the whole workshop
 
 Same camera, same room, same second. **This is what the laptop received**, in each mode:
@@ -383,11 +410,13 @@ that `lying` persists for 3 seconds, not how you got there. Use a mat. Do not dr
 
 Each of these looks like broken code. None of them are.
 
-### "Audio always reads 0.0 and a fall never fires in Mode 1 or 2"
+<details>
+<summary><b>“Audio always reads 0.0, and a fall never fires in Mode 1 or 2”</b> — your mic is deaf, silently</summary>
 
-Your microphone is deaf, silently. PulseAudio defaults to the Nano's **onboard jack**, which
-has nothing plugged into it — so your program records digital silence while `lsusb` and
-`arecord` insist the webcam is fine.
+<br>
+
+PulseAudio defaults to the Nano's **onboard jack**, which has nothing plugged into it — so
+your program records digital silence while `lsusb` and `arecord` insist the webcam is fine.
 
 Prove it, then fix it permanently (a runtime `pactl set-default-source` does **not** survive
 a reboot):
@@ -407,10 +436,15 @@ pactl info | grep 'Default Source'           # must now name the C270
 **Check it worked:** in Mode 1 or 2, the dashboard's `audio` bar should read roughly
 **0.01–0.03** in a quiet room — not `0.0000`. Clap: it should jump past 0.05.
 
-### "Everything reads `absent` / the camera seems dead"
+</details>
 
-A leftover process from your last run is still holding the camera. Two programs cannot open
-one webcam, so the second gets empty frames and reports an empty room.
+<details>
+<summary><b>“Everything reads <code>absent</code> / the camera seems dead”</b> — something else is holding the camera</summary>
+
+<br>
+
+A leftover process from your last run still has the webcam open. Two programs cannot open
+one camera, so the second gets empty frames and reports an empty room.
 
 ```bash
 pkill -9 -f '[e]dge\.'      # the [e] is not a typo -- see below
@@ -424,14 +458,25 @@ pgrep -af '[e]dge\.' || echo CLEAN
 
 Then wait ~2 seconds before restarting: the camera needs a moment to be released.
 
-### "Mode 3 never says FALL, no matter how I lie down"
+</details>
 
-Almost always **framing**, not the detector. Go back to *Camera placement* above. The single
-most common cause: **the floor is not in the frame**, so the camera literally cannot see you
-lying on it. Press **"show camera (setup)"** and look.
+<details>
+<summary><b>“Mode 3 never says FALL, no matter how I lie down”</b> — almost always framing, not the detector</summary>
+
+<br>
+
+Go back to [Camera placement](#camera-placement--read-this-before-you-blame-the-code). The
+single most common cause: **the floor is not in the frame**, so the camera literally cannot
+see you lying on it. Press **“show camera (setup)”** and look at what it sees.
 
 If the framing is genuinely right and it still will not fire, lower the fall hold on the
-Jetson: `FALL_HOLD_S=2 RELAY_URL=... SENSOR=webcam python3 -u -m edge.supervisor`.
+Jetson:
+
+```bash
+FALL_HOLD_S=2 RELAY_URL=http://<LAPTOP_IP>:8000 SENSOR=webcam python3 -u -m edge.supervisor
+```
+
+</details>
 
 ---
 
@@ -453,19 +498,5 @@ uv run --extra dev python -m pytest tests/ -q       # 103 tests
 | `src/web/` | The dashboard: `index.html`, `app.js` (live instrument), `content.js` (all copy, both languages), `compare.js` (the teaching section). |
 | `src/models/` | `movenet_lightning.tflite` — 4.7 MB, committed, no download needed. |
 | `tests/` | 103 tests. Run them on the laptop. |
-| [`docs/specs/`](docs/specs/) | **The build guide.** SPEC-01 is the contract — if any spec disagrees with it, SPEC-01 wins. |
+| [`docs/specs/`](docs/specs/) | **The build guide.** SPEC-01 is the contract — if any spec disagrees with it, SPEC-01 wins. Each spec carries its own build status and the open questions next to the decisions they affect. |
 | [`docs/`](docs/README.md) | Design decisions, hardware runbooks, and the reasoning behind the wrong turns. |
-
----
-
-## Status
-
-- ✅ Modes 1, 2 and 3 built and hardware-validated on a real Jetson Nano + C270
-- ✅ Mode switching, live threshold tuning, and the bandwidth counter — all from the dashboard
-- ✅ The fall alarm fires on a real person (Mode 3, MoveNet keypoints)
-- 🟡 **Mode 3 audio fusion + the setup preview** — built and unit-tested (SPEC-08), **not yet
-  hardware-validated**
-- ⬜ The escalation VLM path — deferred; blocked on an API provider decision
-
-Open questions are recorded in the specs, next to the decisions they affect. When one is
-answered on the device, record the answer back into the spec.
