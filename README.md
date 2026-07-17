@@ -157,6 +157,18 @@ winget install Git.Git
 winget install astral-sh.uv
 ```
 
+**No `winget` on that machine?** (Some Windows 10 images and corporate laptops ship
+without it.) Use the official installers instead — same result:
+
+```powershell
+# Windows without winget — run in PowerShell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+…and install git from [git-scm.com/download/win](https://git-scm.com/download/win)
+(the standalone installer; every default is fine). Either way, **close and reopen the
+terminal afterwards** so the new commands are on `PATH`.
+
 ```bash
 # macOS / Linux
 brew install git                                    # or your package manager
