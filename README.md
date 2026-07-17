@@ -5,8 +5,8 @@
 >
 > A real Jetson Nano is streaming to this dashboard live. Use the three mode buttons to
 > switch what crosses the wire — video, skeleton, or a single flag — and watch the
-> bandwidth counter react. *(Temporary link for review on this branch only; it will go
-> offline afterwards. The `main` branch is the permanent reference.)*
+> bandwidth counter react. *(The link is live only while the demo hardware is running —
+> if it does not answer, nothing is broken; it is simply switched off right now.)*
 
 A hands-on workshop that answers one question:
 
