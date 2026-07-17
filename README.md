@@ -197,7 +197,13 @@ cd edge_workshop_camera
 download it separately):
 
 ```bash
+# macOS / Linux (or Git Bash on Windows)
 ls -l src/models/movenet_lightning.tflite
+```
+
+```powershell
+# Windows (PowerShell or Command Prompt)
+dir src\models\movenet_lightning.tflite
 ```
 
 ### Step 3. Start the relay
