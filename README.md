@@ -54,7 +54,7 @@ means the browser reached the relay; `waiting…` means the Jetson is not sendin
 
 **Make it work**
 - [Camera placement](#camera-placement--read-this-before-you-blame-the-code) — **the biggest single factor.** Read it before you blame the code
-- [Troubleshooting](#troubleshooting--the-three-failures-that-look-like-bugs) — the three failures that look like bugs and are not
+- [Troubleshooting](#troubleshooting--the-four-failures-that-look-like-bugs) — the four failures that look like bugs and are not
 
 **Reference**
 - [Repo layout](#repo-layout)
@@ -482,7 +482,7 @@ that `lying` persists for 3 seconds, not how you got there. Use a mat. Do not dr
 
 ---
 
-## Troubleshooting — the three failures that look like bugs
+## Troubleshooting — the four failures that look like bugs
 
 Each of these looks like broken code. None of them are.
 
@@ -538,6 +538,33 @@ pgrep -af '[e]dge\.' || echo CLEAN
 > survives.
 
 Then wait ~2 seconds before restarting: the camera needs a moment to be released.
+
+</details>
+
+<details>
+<summary><b>“Could not open camera at index 0”</b> — the camera moved to another index</summary>
+
+<br>
+
+USB enumeration is not stable: replug the webcam or reboot the Nano and it can come back
+as `/dev/video1` instead of `/dev/video0`. The code looks at index 0 by default, finds
+nothing there, and the mode client dies with this error — over and over, because the
+supervisor keeps restarting it.
+
+Ask the Nano where the camera actually is:
+
+```bash
+ls /dev/video*        # e.g. /dev/video1  ->  the index is 1
+```
+
+Then pass that number as `CAMERA_INDEX` when you launch:
+
+```bash
+CAMERA_INDEX=1 RELAY_URL=http://<LAPTOP_IP>:8000 SENSOR=webcam python3 -u -m edge.supervisor
+```
+
+Nothing is broken and no setting was lost — the number simply follows USB enumeration
+order. Any time the camera was replugged or the board rebooted, `ls /dev/video*` first.
 
 </details>
 
